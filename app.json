@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "VIS Eyesight",
+    "slug": "vis-eyesight",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-speech-recognition"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.visinc.eyesight",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "VIS Eyesight needs camera access to capture inspection photos and AR overlays with Spectacles.",
+        "NSMicrophoneUsageDescription": "VIS Eyesight needs microphone access for voice-controlled defect marking.",
+        "NSPhotoLibraryUsageDescription": "VIS Eyesight needs photo library access to save inspection documentation.",
+        "NSLocationWhenInUseUsageDescription": "VIS Eyesight needs location access to tag jobsite projects with GPS coordinates.",
+        "NSSpeechRecognitionUsageDescription": "VIS Eyesight uses speech recognition for hands-free voice commands on jobsites."
+      }
+    },
+    "android": {
+      "package": "com.visinc.eyesight"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "05c4a377-7287-41d0-b87e-db36a1dc4e86"
+      }
+    }
+  }
+}
