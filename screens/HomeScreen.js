@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   Text,
 } from 'react-native';
-import { Card, Title, Paragraph, FAB } from 'react-native-paper';
+import { Card, Title, Paragraph } from 'react-native-paper';
 
 export default function HomeScreen({ navigation }) {
   return (
@@ -110,12 +110,6 @@ export default function HomeScreen({ navigation }) {
           </Text>
         </View>
       </ScrollView>
-
-      <FAB
-        style={styles.fab}
-        label="New Inspection"
-        onPress={() => navigation.navigate('Inspection')}
-      />
     </View>
   );
 }

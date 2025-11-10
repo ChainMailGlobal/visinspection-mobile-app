@@ -34,7 +34,7 @@ class AIVisionService {
       });
 
       // Build construction-focused prompt
-      const prompt = this.buildInspectionPrompt(context);
+      const prompt = await this.buildInspectionPrompt(context);
 
       // Call OpenAI GPT-4 Vision API
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -97,28 +97,32 @@ class AIVisionService {
   /**
    * Build inspection prompt based on context
    */
-  buildInspectionPrompt(context) {
-    const { projectType = 'residential', jurisdiction = 'IBC 2021' } = context;
+  async buildInspectionPrompt(context) {
+    const { projectType = 'residential', jurisdiction = 'Honolulu' } = context;
 
-    return `Analyze this construction site image as a professional inspector.
+    // Get Honolulu building code context
+    const codeContext = await BuildingCodeService.getCodeContext(null, projectType);
+
+    return `Analyze this construction site image as a professional inspector in Honolulu, Hawaii.
 
 **Inspection Context:**
 - Project Type: ${projectType}
 - Code Jurisdiction: ${jurisdiction}
+${codeContext}
 
 **Please identify:**
-1. **Materials Visible**: What construction materials do you see? (wood framing, concrete, drywall, etc.)
-2. **Code Compliance**: Check spacing, dimensions, and installation against ${jurisdiction}
-3. **Defects or Issues**: Any visible problems, safety hazards, or code violations?
-4. **Recommendations**: What should be checked, measured, or corrected?
+1. **Category**: What trade is this? (electrical, plumbing, structural, fire safety, HVAC, or general)
+2. **Materials Visible**: What construction materials do you see?
+3. **Code Compliance**: Check against Honolulu Building Code requirements
+4. **Issues**: Any defects, safety hazards, or code violations?
 
-**Format your response as:**
+**Format your response EXACTLY as:**
+Category: [electrical|plumbing|structural|fire safety|HVAC|general]
 Materials: [list materials]
 Compliance: [code check results]
 Issues: [defects found, or "None visible"]
-Recommendations: [action items]
 
-Keep it concise and jobsite-appropriate. Focus on what a contractor needs to know.`;
+Keep it concise and jobsite-appropriate.`;
   }
 
   /**

@@ -18,12 +18,16 @@ class VoiceService {
 
     // Voice command patterns for construction inspections
     this.commands = {
+      // Startup
+      start: ['start', 'begin', 'lets go', 'ready', 'go'],
+
       // Inspection actions
       take_photo: ['take photo', 'capture photo', 'take picture', 'photo'],
       mark_defect: ['mark defect', 'flag issue', 'note problem', 'defect'],
 
       // Navigation
       start_inspection: ['start inspection', 'new inspection', 'begin inspection'],
+      end_inspection: ['end inspection', 'finish inspection', 'done', 'end'],
       save_inspection: ['save inspection', 'save project', 'finish'],
 
       // Building codes
@@ -106,12 +110,12 @@ class VoiceService {
         }
       });
 
-      // Start recognition
+      // Start recognition with continuous mode
       ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
         interimResults: true,
         maxAlternatives: 1,
-        continuous: false,
+        continuous: true, // Keep listening continuously
         requiresOnDeviceRecognition: false,
       });
 

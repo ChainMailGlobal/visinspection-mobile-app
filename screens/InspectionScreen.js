@@ -20,6 +20,7 @@ export default function InspectionScreen({ navigation }) {
   const [location, setLocation] = useState(null);
   const [jurisdiction, setJurisdiction] = useState('IBC 2021');
   const [isListening, setIsListening] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true); // Voice mode toggle
   const [photos, setPhotos] = useState([]);
   const [defects, setDefects] = useState([]);
   const [severity, setSeverity] = useState(null); // 'yellow', 'orange', 'red'
@@ -39,7 +40,24 @@ export default function InspectionScreen({ navigation }) {
   }, []);
 
   const greetUser = async () => {
-    await VoiceService.speak('Aloha, welcome to VIS Inspection. Ready to begin? Just say start.');
+    if (voiceEnabled) {
+      await VoiceService.speak('Aloha, welcome to VIS Inspection. Ready to begin? Just say start.');
+    }
+  };
+
+  const toggleVoiceMode = async () => {
+    if (voiceEnabled) {
+      // Disable voice
+      await VoiceService.stopListening();
+      setIsListening(false);
+      setVoiceEnabled(false);
+      await VoiceService.speak('Voice mode disabled. Using text only.');
+    } else {
+      // Enable voice
+      setVoiceEnabled(true);
+      await VoiceService.speak('Voice mode enabled.');
+      startVoiceCommands();
+    }
   };
 
   const requestPermissions = async () => {
@@ -171,11 +189,13 @@ export default function InspectionScreen({ navigation }) {
         const severityLevel = determineSeverity(result.issues);
         setSeverity(severityLevel);
 
-        // Natural narration with category detection
-        if (result.category && result.narration) {
-          await VoiceService.speak(`I see ${result.category}. ${result.narration}`);
-        } else if (result.narration) {
-          await VoiceService.speak(result.narration);
+        // Natural narration with category detection (only if voice enabled)
+        if (voiceEnabled) {
+          if (result.category && result.narration) {
+            await VoiceService.speak(`I see ${result.category}. ${result.narration}`);
+          } else if (result.narration) {
+            await VoiceService.speak(result.narration);
+          }
         }
       }
 
@@ -350,7 +370,12 @@ export default function InspectionScreen({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.title}>VIS Eyesight</Text>
           <View style={styles.statusIndicators}>
-            {isListening && <Text style={styles.statusBadge}>MIC</Text>}
+            <TouchableOpacity onPress={toggleVoiceMode} style={styles.voiceToggle}>
+              <Text style={[styles.statusBadge, !voiceEnabled && styles.statusBadgeDisabled]}>
+                {voiceEnabled ? 'VOICE' : 'TEXT'}
+              </Text>
+            </TouchableOpacity>
+            {isListening && voiceEnabled && <Text style={styles.statusBadge}>MIC</Text>}
             {isAnalyzing && <Text style={styles.statusBadge}>AI</Text>}
           </View>
         </View>
@@ -513,6 +538,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     overflow: 'hidden',
+  },
+  statusBadgeDisabled: {
+    backgroundColor: 'rgba(128, 128, 128, 0.7)',
+  },
+  voiceToggle: {
+    // No additional styles needed, TouchableOpacity wraps the badge
   },
   startContainer: {
     flex: 1,

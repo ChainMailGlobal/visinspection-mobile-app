@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { FAB } from 'react-native-paper';
 
 export default function ProjectsScreen({ navigation }) {
   const [projects] = useState([
@@ -19,11 +18,6 @@ export default function ProjectsScreen({ navigation }) {
         ))}
       </ScrollView>
 
-      <FAB
-        style={styles.fab}
-        label="New Project"
-        onPress={() => navigation.navigate('Inspection')}
-      />
     </View>
   );
 }
