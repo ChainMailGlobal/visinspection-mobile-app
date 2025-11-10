@@ -48,3 +48,7 @@ build/
 # Testing
 coverage/
 .nyc_output/
+
+# Android native (keep local for gradle.properties but don't track in git)
+android/
+ios/
