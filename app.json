@@ -30,7 +30,13 @@
       }
     },
     "android": {
-      "package": "com.visinc.eyesight"
+      "package": "com.visinc.eyesight",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "extra": {
       "eas": {

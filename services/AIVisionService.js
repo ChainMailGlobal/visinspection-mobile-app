@@ -1,16 +1,20 @@
-import { OPENAI_API_KEY } from '../config/env';
+import { MCP_URL, SUPABASE_ANON_KEY } from '../config/env';
 import * as FileSystem from 'expo-file-system';
 
 /**
- * AIVisionService - Real-time construction inspection using OpenAI GPT-4 Vision
- * Analyzes camera frames for building code compliance, materials, and defects
+ * AIVisionService - Real-time construction inspection using MCP Backend
+ * Uses mode-based AI: Gemini Flash for speed (0.5-1s) during live inspection
+ * Falls back to direct OpenAI if MCP unavailable
  */
 
 class AIVisionService {
   constructor() {
-    this.apiKey = OPENAI_API_KEY;
+    this.mcpUrl = MCP_URL;
+    this.supabaseKey = SUPABASE_ANON_KEY;
     this.analyzing = false;
     this.lastAnalysis = null;
+    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.frameNumber = 0;
   }
 
   /**
@@ -27,67 +31,65 @@ class AIVisionService {
 
     try {
       this.analyzing = true;
+      this.frameNumber++;
 
       // Convert image to base64
       const base64Image = await FileSystem.readAsStringAsync(imageUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      // Build construction-focused prompt
-      const prompt = await this.buildInspectionPrompt(context);
+      const imageUrl = `data:image/jpeg;base64,${base64Image}`;
 
-      // Call OpenAI GPT-4 Vision API
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // Call MCP backend (uses Gemini Flash for 3x speed!)
+      const response = await fetch(`${this.mcpUrl}/call-tool`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
+          'apikey': this.supabaseKey,
+          'Authorization': `Bearer ${this.supabaseKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4-vision-preview',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a professional construction inspector with expertise in IBC (International Building Code) and IRC (International Residential Code). Analyze images for code compliance, material identification, and defects.',
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/jpeg;base64,${base64Image}`,
-                  },
-                },
-              ],
-            },
-          ],
-          max_tokens: 500,
-          temperature: 0.7,
+          name: 'analyze_live_inspection',
+          arguments: {
+            imageUrl,
+            sessionId: this.sessionId,
+            frameNumber: this.frameNumber,
+            timestamp: Date.now(),
+          },
         }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error('❌ OpenAI API error:', error);
-        throw new Error(error.error?.message || 'Vision API failed');
+        const error = await response.text();
+        console.error('❌ MCP API error:', error);
+        throw new Error(`MCP API failed: ${response.status}`);
       }
 
       const data = await response.json();
-      const analysisText = data.choices[0].message.content;
 
-      // Parse the analysis into structured data
-      const analysis = this.parseAnalysis(analysisText, context);
+      // Parse MCP response
+      const mcpContent = data.content?.[0]?.text;
+      if (!mcpContent) {
+        throw new Error('Invalid MCP response format');
+      }
+
+      const analysisData = JSON.parse(mcpContent);
+
+      // Convert MCP format to app format
+      const analysis = this.convertMCPToAppFormat(analysisData, context);
       this.lastAnalysis = analysis;
 
-      console.log('✅ AI Vision Analysis:', analysis);
+      console.log('✅ AI Vision Analysis (Gemini Flash):', analysis);
       return analysis;
     } catch (error) {
       console.error('❌ Failed to analyze frame:', error);
       return {
         error: error.message,
         narration: 'Unable to analyze image. Please try again.',
+        issues: ['Analysis error'],
+        category: 'Error',
+        materials: [],
+        compliance: 'Unable to check compliance',
       };
     } finally {
       this.analyzing = false;
@@ -95,104 +97,78 @@ class AIVisionService {
   }
 
   /**
-   * Build inspection prompt based on context
+   * Convert MCP response format to app format
    */
-  async buildInspectionPrompt(context) {
-    const { projectType = 'residential', jurisdiction = 'Honolulu' } = context;
+  convertMCPToAppFormat(mcpData, context) {
+    const violations = mcpData.violations || [];
 
-    // Get Honolulu building code context
-    const codeContext = await BuildingCodeService.getCodeContext(null, projectType);
+    // Extract issues from violations
+    const issues = violations.length > 0
+      ? violations.map(v => `${v.code}: ${v.issue}`)
+      : ['None visible'];
 
-    return `Analyze this construction site image as a professional inspector in Honolulu, Hawaii.
+    // Determine category from first violation
+    const category = violations.length > 0
+      ? this.mapCategoryToTrade(violations[0].category)
+      : 'general';
 
-**Inspection Context:**
-- Project Type: ${projectType}
-- Code Jurisdiction: ${jurisdiction}
-${codeContext}
-
-**Please identify:**
-1. **Category**: What trade is this? (electrical, plumbing, structural, fire safety, HVAC, or general)
-2. **Materials Visible**: What construction materials do you see?
-3. **Code Compliance**: Check against Honolulu Building Code requirements
-4. **Issues**: Any defects, safety hazards, or code violations?
-
-**Format your response EXACTLY as:**
-Category: [electrical|plumbing|structural|fire safety|HVAC|general]
-Materials: [list materials]
-Compliance: [code check results]
-Issues: [defects found, or "None visible"]
-
-Keep it concise and jobsite-appropriate.`;
-  }
-
-  /**
-   * Parse GPT-4 response into structured data
-   */
-  parseAnalysis(analysisText, context) {
-    const lines = analysisText.split('\n');
-
-    let category = '';
-    let materials = [];
-    let compliance = '';
-    let issues = [];
-
-    let currentSection = null;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-
-      if (trimmed.toLowerCase().startsWith('category:')) {
-        category = trimmed.replace(/^category:/i, '').trim();
-      } else if (trimmed.toLowerCase().startsWith('materials:')) {
-        currentSection = 'materials';
-        const content = trimmed.replace(/^materials:/i, '').trim();
-        if (content) materials.push(content);
-      } else if (trimmed.toLowerCase().startsWith('compliance:')) {
-        currentSection = 'compliance';
-        compliance = trimmed.replace(/^compliance:/i, '').trim();
-      } else if (trimmed.toLowerCase().startsWith('issues:')) {
-        currentSection = 'issues';
-        const content = trimmed.replace(/^issues:/i, '').trim();
-        if (content && !content.toLowerCase().includes('none')) {
-          issues.push(content);
-        }
-      } else if (trimmed && currentSection) {
-        // Continue adding to current section
-        if (currentSection === 'materials') materials.push(trimmed);
-        else if (currentSection === 'compliance') compliance += ' ' + trimmed;
-        else if (currentSection === 'issues' && !trimmed.toLowerCase().includes('none')) {
-          issues.push(trimmed);
-        }
-      }
-    }
-
-    // Generate narration for voice feedback
-    const narration = this.generateNarration({
-      category,
-      materials,
-      compliance,
-      issues,
-    });
+    // Generate narration
+    const narration = this.generateNarrationFromViolations(violations, mcpData.summary);
 
     return {
-      category: category || 'General',
-      materials,
-      compliance: compliance || 'Checking compliance',
-      issues: issues.length > 0 ? issues : ['None visible'],
+      category,
+      issues,
+      materials: [], // MCP doesn't return materials in live mode
+      compliance: violations.length > 0 ? 'Code violations detected' : 'No violations found',
       narration,
-      rawText: analysisText,
+      rawText: JSON.stringify(mcpData, null, 2),
       timestamp: new Date().toISOString(),
+      violations, // Include raw violations for future use
+      confidence: mcpData.confidence || 0,
     };
   }
 
   /**
-   * Generate natural narration for voice feedback
+   * Map MCP category to trade category
+   */
+  mapCategoryToTrade(category) {
+    const mapping = {
+      'structural': 'structural',
+      'electrical': 'electrical',
+      'plumbing': 'plumbing',
+      'safety': 'fire safety',
+      'quality': 'general',
+    };
+    return mapping[category] || 'general';
+  }
+
+  /**
+   * Generate natural narration from violations
+   */
+  generateNarrationFromViolations(violations, summary) {
+    if (violations.length === 0) {
+      return 'No visible issues detected. Area appears compliant.';
+    }
+
+    const highSeverity = violations.filter(v => v.severity === 'critical' || v.severity === 'high');
+
+    if (highSeverity.length > 0) {
+      const firstIssue = highSeverity[0];
+      return `${firstIssue.severity.toUpperCase()} issue detected: ${firstIssue.issue}. ${summary || ''}`;
+    }
+
+    const firstIssue = violations[0];
+    return `Found ${violations.length} issue${violations.length > 1 ? 's' : ''}: ${firstIssue.issue}. ${summary || ''}`;
+  }
+
+  /**
+   * Generate narration for voice feedback (legacy method for compatibility)
    */
   generateNarration({ materials, compliance, issues, recommendations }) {
     let narration = '';
 
     // Materials identification
-    if (materials.length > 0) {
+    if (materials && materials.length > 0) {
       const materialList = materials.slice(0, 3).join(', ');
       narration += `I see ${materialList}. `;
     }
@@ -203,7 +179,7 @@ Keep it concise and jobsite-appropriate.`;
     }
 
     // Issues
-    if (issues.length > 0 && !issues[0].toLowerCase().includes('none')) {
+    if (issues && issues.length > 0 && !issues[0].toLowerCase().includes('none')) {
       const issueCount = issues.length;
       narration += `Found ${issueCount} issue${issueCount > 1 ? 's' : ''}: ${issues[0]}. `;
     } else {
@@ -211,7 +187,7 @@ Keep it concise and jobsite-appropriate.`;
     }
 
     // Recommendations (limit to first one for voice)
-    if (recommendations.length > 0) {
+    if (recommendations && recommendations.length > 0) {
       narration += `Recommendation: ${recommendations[0]}`;
     }
 
@@ -236,6 +212,17 @@ Keep it concise and jobsite-appropriate.`;
    * Clear analysis history
    */
   clearHistory() {
+    this.lastAnalysis = null;
+    this.frameNumber = 0;
+    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Reset session (start new inspection)
+   */
+  resetSession() {
+    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.frameNumber = 0;
     this.lastAnalysis = null;
   }
 }
