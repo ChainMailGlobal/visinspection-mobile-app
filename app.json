@@ -12,9 +12,7 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "plugins": [
-      "expo-speech-recognition"
-    ],
+    "plugins": [],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.visinc.eyesight",
