@@ -12,7 +12,18 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow VIS Eyesight to use voice commands for hands-free inspection.",
+          "speechRecognitionPermission": "Allow VIS Eyesight to recognize voice commands for code inspection.",
+          "android": {
+            "features": ["SPEECH_RECOGNITION"]
+          }
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.visinc.eyesight",
