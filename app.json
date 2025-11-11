@@ -12,7 +12,14 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow VIS Eyesight to use your location to tag inspection addresses."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.visinc.eyesight",
