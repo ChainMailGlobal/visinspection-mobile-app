@@ -1,41 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Text,
-  Alert,
 } from 'react-native';
-import { Card, Title, Paragraph } from 'react-native-paper';
 
 export default function HomeScreen({ navigation }) {
-  const showInspectionModeSelector = () => {
-    Alert.alert(
-      'Choose Inspection Mode',
-      'Select how you want to inspect:',
-      [
-        {
-          text: 'Classic Mode',
-          onPress: () => navigation.navigate('Inspection'),
-          style: 'default'
-        },
-        {
-          text: '🎙️ AI Voice Mode (NEW)',
-          onPress: () => navigation.navigate('RealtimeInspection', {
-            projectId: null, // Demo mode - will use temporary project
-            inspectionType: 'building',
-            projectName: 'Demo Inspection'
-          }),
-          style: 'default'
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ],
-      { cancelable: true }
-    );
+  const startLiveInspection = () => {
+    navigation.navigate('LiveInspection', {
+      projectId: null, // Will auto-create from GPS
+      inspectionType: 'building',
+      projectName: 'New Inspection'
+    });
   };
 
   return (
@@ -69,7 +47,7 @@ export default function HomeScreen({ navigation }) {
 
           <TouchableOpacity
             style={[styles.phaseCard, styles.phaseCardHighlight]}
-            onPress={showInspectionModeSelector}
+            onPress={startLiveInspection}
             activeOpacity={0.8}
           >
             <View style={styles.phaseHeader}>
@@ -82,9 +60,9 @@ export default function HomeScreen({ navigation }) {
               </View>
             </View>
             <Text style={styles.phaseDescription}>
-              Real-time AR jobsite verification with Snap Spectacles
+              Live AI inspection with code violation detection and GPS tracking
             </Text>
-            <Text style={styles.phaseAction}>Start Inspection →</Text>
+            <Text style={styles.phaseAction}>Start Live AI Mode →</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

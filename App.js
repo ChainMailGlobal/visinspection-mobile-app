@@ -8,7 +8,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingScreen from './screens/OnboardingScreen';
 import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
-import InspectionScreen from './screens/InspectionScreen';
 import LiveInspectionScreen from './screens/LiveInspectionScreen';
 import ReportScreen from './screens/ReportScreen';
 import MaterialIdentificationScreen from './screens/MaterialIdentificationScreen';
@@ -46,7 +45,6 @@ export default function App() {
           <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'VIS Eyesight' }} />
-          <Stack.Screen name="Inspection" component={InspectionScreen} options={{ title: 'Classic Mode' }} />
           <Stack.Screen name="LiveInspection" component={LiveInspectionScreen} options={{ headerShown: false, title: 'Live AI Inspection' }} />
           <Stack.Screen name="Report" component={ReportScreen} />
           <Stack.Screen name="MaterialIdentification" component={MaterialIdentificationScreen} />

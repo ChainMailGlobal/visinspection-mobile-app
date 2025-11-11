@@ -14,7 +14,8 @@ export default function MaterialIdentificationScreen() {
 
   useEffect(() => {
     return () => {
-      VoiceService.stopListening();
+      // Voice recognition disabled - using button controls only
+      // VoiceService.stopListening();
     };
   }, []);
 
@@ -37,27 +38,9 @@ export default function MaterialIdentificationScreen() {
   };
 
   const listenForMaterial = async () => {
-    setListening(true);
-    await VoiceService.speak('What material are you looking at?');
-
-    const success = await VoiceService.startListening(
-      (result) => {
-        if (result.transcription) {
-          setMaterialText(result.transcription);
-          lookupMaterial(result.transcription);
-          VoiceService.stopListening();
-          setListening(false);
-        }
-      },
-      (error) => {
-        console.error('Voice error:', error);
-        setListening(false);
-      }
-    );
-
-    if (!success) {
-      setListening(false);
-    }
+    // Voice recognition disabled - not available in managed workflow
+    await VoiceService.speak('Voice recognition not available. Please type material name or scan with camera.');
+    setListening(false);
   };
 
   const analyzeMaterial = async (imageUri) => {
