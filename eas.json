@@ -18,6 +18,12 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_MCP_URL": "@secret:EXPO_PUBLIC_MCP_URL",
+        "EXPO_PUBLIC_SUPABASE_URL": "@secret:EXPO_PUBLIC_SUPABASE_URL",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "@secret:EXPO_PUBLIC_SUPABASE_ANON_KEY",
+        "EXPO_PUBLIC_GOOGLE_AI_API_KEY": "@secret:EXPO_PUBLIC_GOOGLE_AI_API_KEY"
       }
     },
     "production": {

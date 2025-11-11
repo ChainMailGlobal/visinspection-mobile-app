@@ -1,7 +1,7 @@
 /**
  * LiveInspectionScreen - Real-time AI code inspection with violation overlay
- * VOICE-ACTIVATED like Spectacles Lens: Say "Aloha" to start, voice commands for capture
- * Uses expo-speech-recognition (requires dev build) + expo-camera
+ * Button controls only - No voice recognition
+ * Features: REST overlays, GPS auto-project, inspection types, video recording
  */
 
 import { useState, useRef, useEffect } from 'react';
@@ -12,82 +12,118 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Camera } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
-import AIVisionService from '../services/AIVisionService';
+import * as Location from 'expo-location';
+import * as ImageManipulator from 'expo-image-manipulator';
 import VoiceService from '../services/VoiceService';
+import { analyzeLiveInspection } from '../services/McpClient';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const INSPECTION_TYPES = [
+  { id: 'building', label: 'Building/Structural', icon: 'business' },
+  { id: 'electrical', label: 'Electrical', icon: 'bolt' },
+  { id: 'plumbing', label: 'Plumbing', icon: 'water-drop' },
+  { id: 'fire', label: 'Fire Safety', icon: 'local-fire-department' },
+  { id: 'hvac', label: 'HVAC', icon: 'ac-unit' },
+];
+
 export default function LiveInspectionScreen({ route, navigation }) {
-  const { projectId, inspectionType = 'building' } = route.params || {};
+  const { projectId: existingProjectId } = route.params || {};
 
   const cameraRef = useRef(null);
   const frameIntervalRef = useRef(null);
+  const sessionIdRef = useRef(null);
 
   const [permission, requestPermission] = Camera.useCameraPermissions();
+  const [locationPerm, requestLocationPerm] = Location.useForegroundPermissions();
   const [isScanning, setIsScanning] = useState(false);
   const [violations, setViolations] = useState([]);
   const [overlays, setOverlays] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
-  const [voiceState, setVoiceState] = useState({ state: 'IDLE', message: 'Say "Aloha"' });
+  const [projectId, setProjectId] = useState(existingProjectId);
+  const [projectAddress, setProjectAddress] = useState('');
+  const [inspectionType, setInspectionType] = useState('building');
+  const [showTypePicker, setShowTypePicker] = useState(!existingProjectId);
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
 
-  // Initialize voice recognition (like Spectacles)
+  // GPS Auto-Project Creation
   useEffect(() => {
-    const initVoice = async () => {
-      const initialized = await VoiceService.initialize();
-      if (!initialized) {
-        Alert.alert('Voice Error', 'Voice recognition unavailable. Using buttons only.');
+    if (!existingProjectId && locationPerm?.granted) {
+      createProjectFromGPS();
+    }
+  }, [locationPerm]);
+
+  const createProjectFromGPS = async () => {
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const [geocode] = await Location.reverseGeocodeAsync({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      const address = geocode
+        ? `${geocode.street || ''}, ${geocode.city || ''}, ${geocode.region || ''}`
+        : `${location.coords.latitude.toFixed(6)}, ${location.coords.longitude.toFixed(6)}`;
+
+      setProjectAddress(address);
+
+      // Create project in Supabase
+      const { data: user } = await supabase.auth.getUser();
+      if (user.user) {
+        const { data: project } = await supabase
+          .from('projects')
+          .insert({
+            name: `Inspection - ${address}`,
+            address,
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            user_id: user.user.id,
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (project) {
+          setProjectId(project.id);
+          console.log('✅ Auto-created project:', project.id);
+        }
       }
-    };
-
-    initVoice();
-
-    // Listen for voice state changes
-    const unsubscribeState = VoiceService.onStateChange((state) => {
-      setVoiceState(state);
-      console.log('🎤 Voice state:', state);
-    });
-
-    // Listen for voice commands
-    const unsubscribeCommands = VoiceService.onCommand((command) => {
-      console.log('🎤 Voice command:', command);
-      handleVoiceCommand(command);
-    });
-
-    return () => {
-      stopScanning();
-      VoiceService.cleanup();
-      unsubscribeState();
-      unsubscribeCommands();
-    };
-  }, []);
-
-  // Handle voice commands
-  const handleVoiceCommand = (command) => {
-    switch (command) {
-      case 'start_inspection':
-        if (!isScanning) startScanning();
-        break;
-      case 'stop_inspection':
-        if (isScanning) stopScanning();
-        break;
-      case 'capture':
-        captureViolation('Voice capture');
-        break;
+    } catch (error) {
+      console.error('GPS project creation failed:', error);
+      setProjectAddress('Unknown Location');
     }
   };
 
-  const speakInstruction = async (text) => {
-    await VoiceService.speak(text);
-  };
-
-  const startScanning = () => {
+  const startScanning = async () => {
     if (isScanning) return;
+
+    // Create inspection session
+    const { data: user } = await supabase.auth.getUser();
+    if (user.user && projectId) {
+      const { data: session } = await supabase
+        .from('inspection_sessions')
+        .insert({
+          project_id: projectId,
+          user_id: user.user.id,
+          inspection_type: inspectionType,
+          status: 'in_progress',
+          started_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      sessionIdRef.current = session?.id;
+    }
 
     setIsScanning(true);
 
@@ -96,30 +132,54 @@ export default function LiveInspectionScreen({ route, navigation }) {
 
       try {
         setAnalyzing(true);
+
+        // Capture frame
         const photo = await cameraRef.current.takePictureAsync({
           base64: true,
-          quality: 0.7,
+          quality: 0.6,
           skipProcessing: true,
         });
 
-        // Call MCP with analyze_live_inspection tool
-        const analysis = await AIVisionService.analyzeFrame(photo.uri, {
-          sessionId: `live_${projectId}_${Date.now()}`,
-          frameNumber: Date.now(),
+        // Resize for faster upload
+        const resized = await ImageManipulator.manipulateAsync(
+          photo.uri,
+          [{ resize: { width: 960 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+
+        // Call MCP REST endpoint
+        const result = await analyzeLiveInspection({
+          projectId: projectId || 'unknown',
+          projectName: projectAddress || 'Unknown',
+          frame_b64: resized.base64,
           inspectionType,
         });
 
-        if (analysis && analysis.violations && analysis.violations.length > 0) {
-          // Add violations as overlays
-          analysis.violations.forEach((violation, idx) => {
-            addViolationOverlay(violation, idx);
-          });
+        // Update overlays
+        if (result.overlays && result.overlays.length > 0) {
+          const newOverlays = result.overlays.slice(0, 3).map((overlay, idx) => ({
+            id: Date.now() + idx,
+            text: overlay.text || overlay.description || 'Violation',
+            severity: overlay.severity || 'major',
+            code: overlay.code_reference || 'Code Unknown',
+            x: typeof overlay.x === 'number' ? overlay.x : 0.1,
+            y: typeof overlay.y === 'number' ? overlay.y : 0.6 + idx * 0.1,
+          }));
+
+          setOverlays(newOverlays);
+          setViolations(prev => [...prev, ...newOverlays]);
 
           // Speak first violation
-          if (analysis.violations[0]) {
-            const v = analysis.violations[0];
-            speakInstruction(`${v.severity} issue: ${v.issue}. Code ${v.code}`);
+          if (result.narration) {
+            VoiceService.speak(result.narration);
+          } else if (newOverlays[0]) {
+            VoiceService.speak(`${newOverlays[0].severity} violation: ${newOverlays[0].text}`);
           }
+
+          // Save violations to database
+          saveViolations(newOverlays);
+        } else {
+          setOverlays([]);
         }
 
         setAnalyzing(false);
@@ -140,47 +200,55 @@ export default function LiveInspectionScreen({ route, navigation }) {
       frameIntervalRef.current = null;
     }
     setIsScanning(false);
+
+    // Update session status
+    if (sessionIdRef.current) {
+      supabase
+        .from('inspection_sessions')
+        .update({ status: 'completed', ended_at: new Date().toISOString() })
+        .eq('id', sessionIdRef.current)
+        .then(() => console.log('✅ Session completed'));
+    }
   };
 
-  const addViolationOverlay = (violation, index) => {
-    const overlay = {
-      id: Date.now() + index,
-      message: violation.issue || violation.description,
-      severity: violation.severity || 'warning',
-      code: violation.code || 'Unknown',
-      codeReference: violation.codeReference || '',
-    };
+  const saveViolations = async (newViolations) => {
+    if (!sessionIdRef.current) return;
 
-    setOverlays(prev => [...prev.slice(-3), overlay]); // Keep last 3
-    setViolations(prev => [...prev, overlay]);
+    const { data: user } = await supabase.auth.getUser();
+    if (!user.user) return;
 
-    // Auto-remove overlay after 10 seconds
-    setTimeout(() => {
-      setOverlays(prev => prev.filter(o => o.id !== overlay.id));
-    }, 10000);
+    const records = newViolations.map(v => ({
+      session_id: sessionIdRef.current,
+      project_id: projectId,
+      user_id: user.user.id,
+      violation_description: v.text,
+      code_reference: v.code,
+      severity: v.severity,
+      created_at: new Date().toISOString(),
+    }));
+
+    await supabase.from('inspection_violations').insert(records);
   };
 
-  const captureViolation = async (note = '') => {
+  const captureViolation = async () => {
     if (!cameraRef.current) return;
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 1,
-      });
+      const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
 
-      // Save to database
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && projectId) {
+      const { data: user } = await supabase.auth.getUser();
+      if (user.user && projectId) {
         await supabase.from('captured_violations').insert({
           project_id: projectId,
-          user_id: user.id,
-          violation_description: note || 'Manually flagged violation',
+          session_id: sessionIdRef.current,
+          user_id: user.user.id,
           photo_url: photo.uri,
+          violation_description: 'Manually flagged',
           severity: 'warning',
-          location: 'Live Inspection',
+          created_at: new Date().toISOString(),
         });
 
-        speakInstruction('Violation captured');
+        VoiceService.speak('Violation captured');
         Alert.alert('✓ Captured', 'Violation photo saved');
       }
     } catch (error) {
@@ -195,27 +263,39 @@ export default function LiveInspectionScreen({ route, navigation }) {
       '✅ Inspection Complete',
       `Found ${violations.length} potential violation${violations.length !== 1 ? 's' : ''}`,
       [
-        { text: 'Continue Scanning', style: 'cancel' },
-        { text: 'Generate Report', onPress: () => {
-          navigation.navigate('Report', {
-            projectId,
-            violations: violations.map(v => ({
-              description: v.message,
-              code: v.code,
-              severity: v.severity,
-            }))
-          });
-        }}
+        { text: 'Continue Scanning', style: 'cancel', onPress: () => startScanning() },
+        {
+          text: 'Generate PDF Report',
+          onPress: async () => {
+            navigation.navigate('Report', {
+              projectId,
+              sessionId: sessionIdRef.current,
+              violations,
+            });
+          },
+        },
       ]
     );
   };
 
+  const selectInspectionType = (type) => {
+    setInspectionType(type);
+    setShowTypePicker(false);
+    if (!locationPerm?.granted) {
+      requestLocationPerm();
+    }
+  };
+
   const getSeverityColor = (severity) => {
     switch (severity) {
-      case 'critical': return '#EF4444';
-      case 'high': return '#F59E0B';
-      case 'warning': return '#FCD34D';
-      default: return '#3B82F6';
+      case 'critical':
+        return '#EF4444';
+      case 'major':
+        return '#F59E0B';
+      case 'minor':
+        return '#FCD34D';
+      default:
+        return '#3B82F6';
     }
   };
 
@@ -242,27 +322,33 @@ export default function LiveInspectionScreen({ route, navigation }) {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <Camera
-        ref={cameraRef}
-        style={styles.camera}
-        facing="back"
-      >
+      {/* Inspection Type Picker Modal */}
+      <Modal visible={showTypePicker} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Inspection Type</Text>
+            {INSPECTION_TYPES.map(type => (
+              <TouchableOpacity
+                key={type.id}
+                style={styles.typeButton}
+                onPress={() => selectInspectionType(type.id)}
+              >
+                <MaterialIcons name={type.icon} size={24} color="#3B82F6" />
+                <Text style={styles.typeButtonText}>{type.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      <Camera ref={cameraRef} style={styles.camera} facing="back">
         {/* Top Bar */}
         <View style={styles.topBar}>
-          {/* Voice State Indicator (like Spectacles) */}
-          <View style={[
-            styles.badge,
-            {
-              backgroundColor: voiceState.state === 'LISTENING' ? '#3B82F6' :
-                              voiceState.state === 'IDLE' ? '#6B7280' : '#10B981'
-            }
-          ]}>
-            <MaterialIcons
-              name={voiceState.state === 'LISTENING' ? 'mic' : 'mic-none'}
-              size={16}
-              color="white"
-            />
-            <Text style={styles.badgeText}>{voiceState.message}</Text>
+          <View style={styles.badge}>
+            <MaterialIcons name="place" size={16} color="white" />
+            <Text style={styles.badgeText}>
+              {projectAddress || 'Getting location...'}
+            </Text>
           </View>
 
           {isScanning && (
@@ -283,9 +369,16 @@ export default function LiveInspectionScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
 
+        {/* Inspection Type Badge */}
+        <View style={styles.typeBadge}>
+          <Text style={styles.typeBadgeText}>
+            {INSPECTION_TYPES.find(t => t.id === inspectionType)?.label || 'Building'}
+          </Text>
+        </View>
+
         {/* AR Violation Overlays */}
         <View style={styles.overlaysContainer}>
-          {overlays.map((overlay, idx) => (
+          {overlays.map(overlay => (
             <View
               key={overlay.id}
               style={[
@@ -293,44 +386,32 @@ export default function LiveInspectionScreen({ route, navigation }) {
                 {
                   backgroundColor: getSeverityColor(overlay.severity) + 'F0',
                   borderColor: getSeverityColor(overlay.severity),
-                  top: 100 + idx * 100,
-                }
+                  left: `${overlay.x * 100}%`,
+                  top: `${overlay.y * 100}%`,
+                },
               ]}
             >
               <View style={styles.overlayHeader}>
-                <MaterialIcons name="warning" size={20} color="white" />
+                <MaterialIcons name="warning" size={18} color="white" />
                 <Text style={styles.overlayCode}>{overlay.code}</Text>
               </View>
-              <Text style={styles.overlayMessage}>{overlay.message}</Text>
-              {overlay.codeReference && (
-                <Text style={styles.overlayReference}>{overlay.codeReference}</Text>
-              )}
+              <Text style={styles.overlayMessage}>{overlay.text}</Text>
             </View>
           ))}
         </View>
 
         {/* Bottom Controls */}
         <View style={styles.bottomBar}>
-          {/* Control Buttons */}
           <View style={styles.controls}>
             <TouchableOpacity
               style={[styles.controlButton, isScanning && styles.controlButtonActive]}
               onPress={isScanning ? stopScanning : startScanning}
             >
-              <MaterialIcons
-                name={isScanning ? 'pause' : 'play-arrow'}
-                size={32}
-                color="white"
-              />
-              <Text style={styles.controlText}>
-                {isScanning ? 'PAUSE' : 'SCAN'}
-              </Text>
+              <MaterialIcons name={isScanning ? 'pause' : 'play-arrow'} size={32} color="white" />
+              <Text style={styles.controlText}>{isScanning ? 'PAUSE' : 'SCAN'}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={() => captureViolation()}
-            >
+            <TouchableOpacity style={styles.controlButton} onPress={captureViolation}>
               <MaterialIcons name="flag" size={32} color="white" />
               <Text style={styles.controlText}>MARK</Text>
             </TouchableOpacity>
@@ -344,7 +425,6 @@ export default function LiveInspectionScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Violations Counter */}
           {violations.length > 0 && (
             <View style={styles.counter}>
               <Text style={styles.counterText}>
@@ -353,11 +433,10 @@ export default function LiveInspectionScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* Analyzing Indicator */}
           {analyzing && (
             <View style={styles.analyzingBox}>
               <ActivityIndicator size="small" color="white" />
-              <Text style={styles.analyzingText}>Analyzing...</Text>
+              <Text style={styles.analyzingText}>Analyzing with AI...</Text>
             </View>
           )}
         </View>
@@ -394,6 +473,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  typeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    marginBottom: 12,
+    gap: 12,
+  },
+  typeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111',
+  },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -414,52 +526,60 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: 'white',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   closeButton: {
     padding: 4,
   },
-  overlaysContainer: {
+  typeBadge: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    top: 0,
+    top: 100,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  overlay: {
+  typeBadgeText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  overlaysContainer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 3,
+    top: 0,
+    bottom: 0,
+  },
+  overlay: {
+    position: 'absolute',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
     elevation: 10,
+    maxWidth: '70%',
   },
   overlayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 4,
   },
   overlayCode: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
   overlayMessage: {
     color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  overlayReference: {
-    color: 'rgba(255,255,255,0.9)',
     fontSize: 12,
-    fontStyle: 'italic',
+    fontWeight: '600',
   },
   bottomBar: {
     position: 'absolute',
@@ -470,17 +590,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     backgroundColor: 'rgba(0,0,0,0.8)',
     gap: 12,
-  },
-  transcriptBox: {
-    backgroundColor: 'rgba(59,130,246,0.3)',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.5)',
-  },
-  transcriptText: {
-    color: 'white',
-    fontSize: 14,
   },
   controls: {
     flexDirection: 'row',
