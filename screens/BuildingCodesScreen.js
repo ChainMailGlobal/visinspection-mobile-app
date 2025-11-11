@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
-import { TextInput, Button } from 'react-native-paper';
+import { TextInput } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import AIVisionService from '../services/AIVisionService';
-import BuildingCodeService from '../services/BuildingCodeService';
 import PlanStorageService from '../services/PlanStorageService';
+import { runDppPrecheck } from '../services/DppPrecheckService';
+import * as FileSystem from 'expo-file-system';
 
-export default function BuildingCodesScreen({ navigation }) {
+export default function BuildingCodesScreen() {
   const [jurisdiction, setJurisdiction] = useState('Honolulu');
   const [projectType, setProjectType] = useState('residential');
   const [planImage, setPlanImage] = useState(null);
@@ -52,28 +52,33 @@ export default function BuildingCodesScreen({ navigation }) {
   const analyzePlan = async (imageUri) => {
     setAnalyzing(true);
     try {
-      // Fetch Honolulu codes first
-      await BuildingCodeService.fetchHonoluluCodes();
+      // Convert image to base64 for DPP pre-check
+      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const imageUrl = `data:image/jpeg;base64,${base64Image}`;
 
-      // Analyze plan with AI using code compliance tool
-      const analysis = await AIVisionService.analyzePlan(imageUri, {
-        projectType,
-        jurisdiction,
+      // Run actual DPP pre-check with code citations and page numbers
+      const dppResult = await runDppPrecheck({
+        jurisdiction: jurisdiction.toLowerCase(),
+        projectType: projectType.toLowerCase(),
+        imageUrl,
       });
 
-      // Get permit requirements based on detected category
-      const permitInfo = BuildingCodeService.getPermitRequirements(analysis.category);
-
-      // Save plan
+      // Save plan with DPP analysis
       await PlanStorageService.savePlan({
         imageUri,
         jurisdiction,
         projectType,
-        analysis,
-        permitInfo,
+        analysis: dppResult.analysis,
+        dppRequirements: dppResult.dpp_requirements,
       });
 
-      setResult({ ...analysis, permitInfo });
+      setResult({
+        ...dppResult.analysis,
+        dpp_requirements: dppResult.dpp_requirements,
+        timestamp: dppResult.timestamp,
+      });
       setAnalyzing(false);
     } catch (error) {
       console.error('Analysis error:', error);
@@ -126,40 +131,57 @@ export default function BuildingCodesScreen({ navigation }) {
 
         {result && (
           <View style={styles.resultCard}>
-            <Text style={styles.resultTitle}>Analysis Complete</Text>
-            <Text style={styles.resultText}>Category: {result.category}</Text>
-            <Text style={styles.resultText}>Compliance: {result.compliance}</Text>
+            <Text style={styles.resultTitle}>📋 Honolulu DPP Pre-Check Complete</Text>
+            <Text style={styles.resultText}>Project Type: {projectType}</Text>
+            <Text style={styles.resultText}>Analysis: {result.summary || result.compliance}</Text>
 
-            {result.violations && result.violations.length > 0 && (
-              <View style={styles.violationsSection}>
-                <Text style={styles.violationsTitle}>Issues Found:</Text>
-                {result.violations.map((violation, idx) => (
-                  <Text key={idx} style={styles.violationText}>• {violation.issue || violation.description}</Text>
+            {/* Required Forms Checklist */}
+            {result.dpp_requirements && result.dpp_requirements.required_forms && (
+              <View style={styles.checklistSection}>
+                <Text style={styles.sectionSubtitle}>Required Forms:</Text>
+                {result.dpp_requirements.required_forms.map((form, idx) => (
+                  <Text key={idx} style={styles.checklistItem}>✓ {form}</Text>
                 ))}
               </View>
             )}
 
-            {result.permitInfo && (
-              <View style={styles.dppReferenceCard}>
-                <Text style={styles.dppTitle}>📋 Honolulu DPP Reference</Text>
-                <Text style={styles.dppAuthority}>{result.permitInfo.authority}</Text>
-                <Text style={styles.dppMessage}>{result.permitInfo.message}</Text>
-                <TouchableOpacity
-                  style={styles.dppButton}
-                  onPress={() => Alert.alert(
-                    'Honolulu DPP',
-                    'Open official permit requirements page?',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Open', onPress: () => {
-                        // In real app, use Linking.openURL(result.permitInfo.referenceUrl)
-                        Alert.alert('Info', result.permitInfo.referenceUrl);
-                      }}
-                    ]
-                  )}
-                >
-                  <Text style={styles.dppButtonText}>View Official Requirements →</Text>
-                </TouchableOpacity>
+            {/* Code References with Page Numbers */}
+            {result.dpp_requirements && result.dpp_requirements.code_references && (
+              <View style={styles.codeReferencesSection}>
+                <Text style={styles.sectionSubtitle}>Applicable Building Codes:</Text>
+                {result.dpp_requirements.code_references.map((ref, idx) => (
+                  <View key={idx} style={styles.codeReferenceItem}>
+                    <Text style={styles.codeNumber}>{ref.code}</Text>
+                    <Text style={styles.codeDescription}>{ref.description}</Text>
+                    <Text style={styles.codePage}>Page {ref.page}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Violations Found by AI */}
+            {result.violations && result.violations.length > 0 && (
+              <View style={styles.violationsSection}>
+                <Text style={styles.violationsTitle}>⚠️ Issues Detected:</Text>
+                {result.violations.map((violation, idx) => (
+                  <View key={idx} style={styles.violationItem}>
+                    <Text style={styles.violationCode}>{violation.code || 'General'}</Text>
+                    <Text style={styles.violationText}>{violation.issue || violation.description}</Text>
+                    {violation.recommendation && (
+                      <Text style={styles.violationFix}>Fix: {violation.recommendation}</Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Recommendations */}
+            {result.recommendations && result.recommendations.length > 0 && (
+              <View style={styles.recommendationsSection}>
+                <Text style={styles.sectionSubtitle}>Recommendations:</Text>
+                {result.recommendations.map((rec, idx) => (
+                  <Text key={idx} style={styles.recommendationText}>• {rec}</Text>
+                ))}
               </View>
             )}
           </View>
@@ -348,5 +370,86 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#999999',
     fontStyle: 'italic',
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  checklistSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  checklistItem: {
+    fontSize: 14,
+    color: '#00CC66',
+    marginBottom: 6,
+    paddingLeft: 8,
+  },
+  codeReferencesSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  codeReferenceItem: {
+    backgroundColor: '#F8F8F8',
+    padding: 10,
+    borderRadius: 6,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#0066CC',
+  },
+  codeNumber: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0066CC',
+    marginBottom: 4,
+  },
+  codeDescription: {
+    fontSize: 13,
+    color: '#1A1A1A',
+    marginBottom: 2,
+  },
+  codePage: {
+    fontSize: 12,
+    color: '#666666',
+    fontStyle: 'italic',
+  },
+  violationItem: {
+    backgroundColor: '#FFF5F5',
+    padding: 10,
+    borderRadius: 6,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF6B6B',
+  },
+  violationCode: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FF6B6B',
+    marginBottom: 4,
+  },
+  violationFix: {
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  recommendationsSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  recommendationText: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 4,
+    lineHeight: 20,
   },
 });

@@ -245,7 +245,8 @@ class AIVisionService {
 
       const analysisData = JSON.parse(mcpContent);
 
-      // Convert to plan analysis format with Honolulu DPP reference
+      // Convert to plan analysis format
+      // Note: For real DPP pre-check with code citations, use DppPrecheckService instead
       const planAnalysis = {
         category: analysisData.category || 'Residential Construction',
         compliance: analysisData.compliance || 'Code compliance check complete',
@@ -253,11 +254,6 @@ class AIVisionService {
         violations: analysisData.violations || [],
         summary: analysisData.summary || 'Plan analyzed',
         recommendations: analysisData.recommendations || [],
-        permitInfo: {
-          authority: 'Honolulu Department of Planning and Permitting (DPP)',
-          referenceUrl: 'https://www.honolulu.gov/dpp/permitting/building-permits-home/building-permits-inspection/',
-          message: 'Verify requirements with DPP before submission',
-        },
         timestamp: new Date().toISOString(),
       };
 

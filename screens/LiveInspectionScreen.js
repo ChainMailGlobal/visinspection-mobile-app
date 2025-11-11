@@ -1,6 +1,6 @@
 /**
  * LiveInspectionScreen - Real-time AI code inspection with violation overlay
- * Uses Expo native APIs: expo-camera + expo-speech-recognition
+ * Uses Expo native APIs: expo-camera + expo-speech (TTS only)
  * Captures frames every 2s, analyzes with AI, shows violations with IBC/IRC references
  */
 
@@ -17,7 +17,6 @@ import {
 import { Camera, CameraType } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useSpeechRecognitionEvent, ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import * as Speech from 'expo-speech';
 import AIVisionService from '../services/AIVisionService';
 import { createClient } from '@supabase/supabase-js';
@@ -30,79 +29,24 @@ export default function LiveInspectionScreen({ route, navigation }) {
 
   const cameraRef = useRef(null);
   const frameIntervalRef = useRef(null);
-  const speechTimeoutRef = useRef(null);
 
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const [isScanning, setIsScanning] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [violations, setViolations] = useState([]);
   const [overlays, setOverlays] = useState([]);
-  const [transcript, setTranscript] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
 
-  // Speech recognition event handler
-  useSpeechRecognitionEvent('result', (event) => {
-    const transcription = event.results[0]?.transcript;
-    if (transcription) {
-      setTranscript(transcription);
-      handleVoiceCommand(transcription);
-    }
-  });
-
   useEffect(() => {
-    if (permission?.granted) {
-      startVoiceListening();
-    }
-
     return () => {
       stopScanning();
-      stopVoiceListening();
     };
-  }, [permission]);
+  }, []);
 
-  const startVoiceListening = async () => {
+  const speakInstruction = async (text) => {
     try {
-      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (result.granted) {
-        await ExpoSpeechRecognitionModule.start({
-          lang: 'en-US',
-          interimResults: true,
-          maxAlternatives: 1,
-          continuous: true,
-          requiresOnDeviceRecognition: false,
-        });
-        setIsListening(true);
-        await Speech.speak('Ready to inspect. Point camera at work and say "scan" or "flag this"');
-      }
+      await Speech.speak(text);
     } catch (error) {
-      console.error('Voice start error:', error);
-    }
-  };
-
-  const stopVoiceListening = async () => {
-    try {
-      await ExpoSpeechRecognitionModule.stop();
-      setIsListening(false);
-    } catch (error) {
-      console.error('Voice stop error:', error);
-    }
-  };
-
-  const handleVoiceCommand = (command) => {
-    const cmd = command.toLowerCase();
-
-    if (cmd.includes('scan') || cmd.includes('start') || cmd.includes('analyze')) {
-      if (!isScanning) {
-        startScanning();
-        Speech.speak('Starting continuous scan');
-      }
-    } else if (cmd.includes('stop') || cmd.includes('pause')) {
-      stopScanning();
-      Speech.speak('Scan paused');
-    } else if (cmd.includes('flag') || cmd.includes('mark')) {
-      captureViolation('Voice flagged issue');
-    } else if (cmd.includes('done') || cmd.includes('finish')) {
-      finishInspection();
+      console.error('Speech error:', error);
     }
   };
 
@@ -138,12 +82,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
           // Speak first violation
           if (analysis.violations[0]) {
             const v = analysis.violations[0];
-            Speech.speak(`${v.severity} issue: ${v.issue}. Code ${v.code}`);
-          }
-        } else if (analysis && analysis.narration) {
-          // Periodic status update
-          if (Date.now() % 10000 < 2000) { // Every ~10 seconds
-            Speech.speak(analysis.narration);
+            speakInstruction(`${v.severity} issue: ${v.issue}. Code ${v.code}`);
           }
         }
 
@@ -205,7 +144,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
           location: 'Live Inspection',
         });
 
-        Speech.speak('Violation captured');
+        speakInstruction('Violation captured');
         Alert.alert('✓ Captured', 'Violation photo saved');
       }
     } catch (error) {
@@ -215,15 +154,12 @@ export default function LiveInspectionScreen({ route, navigation }) {
 
   const finishInspection = () => {
     stopScanning();
-    stopVoiceListening();
 
     Alert.alert(
       '✅ Inspection Complete',
       `Found ${violations.length} potential violation${violations.length !== 1 ? 's' : ''}`,
       [
-        { text: 'Continue Scanning', style: 'cancel', onPress: () => {
-          startVoiceListening();
-        }},
+        { text: 'Continue Scanning', style: 'cancel' },
         { text: 'Generate Report', onPress: () => {
           navigation.navigate('Report', {
             projectId,
@@ -278,13 +214,6 @@ export default function LiveInspectionScreen({ route, navigation }) {
       >
         {/* Top Bar */}
         <View style={styles.topBar}>
-          <View style={styles.badge}>
-            <MaterialIcons name="mic" size={16} color="white" />
-            <Text style={styles.badgeText}>
-              {isListening ? 'LISTENING' : 'VOICE OFF'}
-            </Text>
-          </View>
-
           {isScanning && (
             <View style={[styles.badge, { backgroundColor: '#10B981' }]}>
               <MaterialIcons name="visibility" size={16} color="white" />
@@ -296,7 +225,6 @@ export default function LiveInspectionScreen({ route, navigation }) {
             style={styles.closeButton}
             onPress={() => {
               stopScanning();
-              stopVoiceListening();
               navigation.goBack();
             }}
           >
@@ -332,13 +260,6 @@ export default function LiveInspectionScreen({ route, navigation }) {
 
         {/* Bottom Controls */}
         <View style={styles.bottomBar}>
-          {/* Voice Transcript */}
-          {transcript && (
-            <View style={styles.transcriptBox}>
-              <Text style={styles.transcriptText}>🎤 {transcript}</Text>
-            </View>
-          )}
-
           {/* Control Buttons */}
           <View style={styles.controls}>
             <TouchableOpacity
