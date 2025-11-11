@@ -33,7 +33,8 @@
           "photosPermission": "VIS Eyesight needs photo library access to save inspection documentation.",
           "cameraPermission": "VIS Eyesight needs camera access to capture inspection photos."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "ios": {
       "supportsTablet": true,
