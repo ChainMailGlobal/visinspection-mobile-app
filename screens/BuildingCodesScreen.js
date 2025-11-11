@@ -55,8 +55,8 @@ export default function BuildingCodesScreen({ navigation }) {
       // Fetch Honolulu codes first
       await BuildingCodeService.fetchHonoluluCodes();
 
-      // Analyze plan with AI
-      const analysis = await AIVisionService.analyzeFrame(imageUri, {
+      // Analyze plan with AI using code compliance tool
+      const analysis = await AIVisionService.analyzePlan(imageUri, {
         projectType,
         jurisdiction,
       });
@@ -77,7 +77,7 @@ export default function BuildingCodesScreen({ navigation }) {
       setAnalyzing(false);
     } catch (error) {
       console.error('Analysis error:', error);
-      Alert.alert('Analysis failed', 'Please try again');
+      Alert.alert('Analysis failed', error.message || 'Please try again');
       setAnalyzing(false);
     }
   };
@@ -129,12 +129,38 @@ export default function BuildingCodesScreen({ navigation }) {
             <Text style={styles.resultTitle}>Analysis Complete</Text>
             <Text style={styles.resultText}>Category: {result.category}</Text>
             <Text style={styles.resultText}>Compliance: {result.compliance}</Text>
+
+            {result.violations && result.violations.length > 0 && (
+              <View style={styles.violationsSection}>
+                <Text style={styles.violationsTitle}>Issues Found:</Text>
+                {result.violations.map((violation, idx) => (
+                  <Text key={idx} style={styles.violationText}>• {violation.issue || violation.description}</Text>
+                ))}
+              </View>
+            )}
+
             {result.permitInfo && (
-              <>
-                <Text style={styles.permitTitle}>{result.permitInfo.permit}</Text>
-                <Text style={styles.permitNotes}>{result.permitInfo.notes}</Text>
-                <Text style={styles.permitInspector}>Inspector: {result.permitInfo.inspector}</Text>
-              </>
+              <View style={styles.dppReferenceCard}>
+                <Text style={styles.dppTitle}>📋 Honolulu DPP Reference</Text>
+                <Text style={styles.dppAuthority}>{result.permitInfo.authority}</Text>
+                <Text style={styles.dppMessage}>{result.permitInfo.message}</Text>
+                <TouchableOpacity
+                  style={styles.dppButton}
+                  onPress={() => Alert.alert(
+                    'Honolulu DPP',
+                    'Open official permit requirements page?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Open', onPress: () => {
+                        // In real app, use Linking.openURL(result.permitInfo.referenceUrl)
+                        Alert.alert('Info', result.permitInfo.referenceUrl);
+                      }}
+                    ]
+                  )}
+                >
+                  <Text style={styles.dppButtonText}>View Official Requirements →</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         )}
@@ -250,6 +276,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1A1A1A',
     marginBottom: 8,
+  },
+  violationsSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  violationsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF6B6B',
+    marginBottom: 8,
+  },
+  violationText: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  dppReferenceCard: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#F0F7FF',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#0066CC',
+  },
+  dppTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0066CC',
+    marginBottom: 8,
+  },
+  dppAuthority: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  dppMessage: {
+    fontSize: 13,
+    color: '#666666',
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  dppButton: {
+    backgroundColor: '#0066CC',
+    borderRadius: 6,
+    padding: 12,
+    alignItems: 'center',
+  },
+  dppButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   permitTitle: {
     fontSize: 16,

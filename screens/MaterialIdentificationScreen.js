@@ -63,10 +63,7 @@ export default function MaterialIdentificationScreen() {
   const analyzeMaterial = async (imageUri) => {
     setAnalyzing(true);
     try {
-      const analysis = await AIVisionService.analyzeFrame(imageUri, {
-        projectType: 'material_identification',
-        jurisdiction: 'Honolulu',
-      });
+      const analysis = await AIVisionService.identifyMaterial(imageUri);
 
       setResult(analysis);
       setAnalyzing(false);
@@ -77,7 +74,7 @@ export default function MaterialIdentificationScreen() {
       }
     } catch (error) {
       console.error('Material analysis error:', error);
-      Alert.alert('Analysis failed', 'Please try again');
+      Alert.alert('Analysis failed', error.message || 'Please try again');
       setAnalyzing(false);
     }
   };

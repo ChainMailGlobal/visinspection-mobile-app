@@ -195,6 +195,148 @@ class AIVisionService {
   }
 
   /**
+   * Analyze building plans for code compliance (FORESIGHT mode)
+   * References Honolulu DPP Building Permits requirements
+   * @param {string} imageUri - Local URI to the uploaded plan
+   * @param {object} context - Additional context (jurisdiction, project type, etc.)
+   * @returns {Promise<object>} Analysis results with compliance and permit info
+   */
+  async analyzePlan(imageUri, context = {}) {
+    try {
+      console.log('📋 Analyzing building plan against Honolulu DPP requirements...');
+
+      // Convert image to base64
+      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const imageUrl = `data:image/jpeg;base64,${base64Image}`;
+
+      // Call MCP backend with analyze_photo tool
+      const response = await fetch(`${this.mcpUrl}/call-tool`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.supabaseKey,
+          'Authorization': `Bearer ${this.supabaseKey}`,
+        },
+        body: JSON.stringify({
+          name: 'analyze_photo',
+          arguments: {
+            imageUrl,
+            analysisType: 'code_compliance',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('❌ MCP API error:', error);
+        throw new Error(`MCP API failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Parse MCP response
+      const mcpContent = data.content?.[0]?.text;
+      if (!mcpContent) {
+        throw new Error('Invalid MCP response format');
+      }
+
+      const analysisData = JSON.parse(mcpContent);
+
+      // Convert to plan analysis format with Honolulu DPP reference
+      const planAnalysis = {
+        category: analysisData.category || 'Residential Construction',
+        compliance: analysisData.compliance || 'Code compliance check complete',
+        issues: analysisData.violations?.map(v => v.issue) || [],
+        violations: analysisData.violations || [],
+        summary: analysisData.summary || 'Plan analyzed',
+        recommendations: analysisData.recommendations || [],
+        permitInfo: {
+          authority: 'Honolulu Department of Planning and Permitting (DPP)',
+          referenceUrl: 'https://www.honolulu.gov/dpp/permitting/building-permits-home/building-permits-inspection/',
+          message: 'Verify requirements with DPP before submission',
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      console.log('✅ Plan Analysis Complete (Honolulu DPP):', planAnalysis);
+      return planAnalysis;
+    } catch (error) {
+      console.error('❌ Failed to analyze plan:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Identify construction materials from photo
+   * @param {string} imageUri - Local URI to the material photo
+   * @returns {Promise<object>} Material identification results
+   */
+  async identifyMaterial(imageUri) {
+    try {
+      console.log('🔍 Identifying construction material...');
+
+      // Convert image to base64
+      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const imageUrl = `data:image/jpeg;base64,${base64Image}`;
+
+      // Call MCP backend with analyze_photo tool
+      const response = await fetch(`${this.mcpUrl}/call-tool`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.supabaseKey,
+          'Authorization': `Bearer ${this.supabaseKey}`,
+        },
+        body: JSON.stringify({
+          name: 'analyze_photo',
+          arguments: {
+            imageUrl,
+            analysisType: 'material_identification',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('❌ MCP API error:', error);
+        throw new Error(`MCP API failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Parse MCP response
+      const mcpContent = data.content?.[0]?.text;
+      if (!mcpContent) {
+        throw new Error('Invalid MCP response format');
+      }
+
+      const analysisData = JSON.parse(mcpContent);
+
+      // Convert to material identification format
+      const materialResult = {
+        materials: analysisData.materials || [],
+        compliance: analysisData.compliance || 'Material identified',
+        category: 'Material Identification',
+        specifications: analysisData.specifications || [],
+        recommendations: analysisData.recommendations || [],
+        timestamp: new Date().toISOString(),
+      };
+
+      console.log('✅ Material Identified:', materialResult);
+      return materialResult;
+    } catch (error) {
+      console.error('❌ Failed to identify material:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get the last analysis result
    */
   getLastAnalysis() {
