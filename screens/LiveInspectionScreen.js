@@ -1,7 +1,7 @@
 /**
  * LiveInspectionScreen - Real-time AI code inspection with violation overlay
- * Uses Expo native APIs: expo-camera + expo-speech (TTS only)
- * Captures frames every 2s, analyzes with AI, shows violations with IBC/IRC references
+ * VOICE-ACTIVATED like Spectacles Lens: Say "Aloha" to start, voice commands for capture
+ * Uses expo-speech-recognition (requires dev build) + expo-camera
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -17,8 +17,8 @@ import {
 import { Camera, CameraType } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Speech from 'expo-speech';
 import AIVisionService from '../services/AIVisionService';
+import VoiceService from '../services/VoiceService';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
 import { analyzeLiveInspection } from '../services/McpClient';
@@ -36,19 +36,56 @@ export default function LiveInspectionScreen({ route, navigation }) {
   const [violations, setViolations] = useState([]);
   const [overlays, setOverlays] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
+  const [voiceState, setVoiceState] = useState({ state: 'IDLE', message: 'Say "Aloha"' });
 
+  // Initialize voice recognition (like Spectacles)
   useEffect(() => {
+    const initVoice = async () => {
+      const initialized = await VoiceService.initialize();
+      if (!initialized) {
+        Alert.alert('Voice Error', 'Voice recognition unavailable. Using buttons only.');
+      }
+    };
+
+    initVoice();
+
+    // Listen for voice state changes
+    const unsubscribeState = VoiceService.onStateChange((state) => {
+      setVoiceState(state);
+      console.log('🎤 Voice state:', state);
+    });
+
+    // Listen for voice commands
+    const unsubscribeCommands = VoiceService.onCommand((command) => {
+      console.log('🎤 Voice command:', command);
+      handleVoiceCommand(command);
+    });
+
     return () => {
       stopScanning();
+      VoiceService.cleanup();
+      unsubscribeState();
+      unsubscribeCommands();
     };
   }, []);
 
-  const speakInstruction = async (text) => {
-    try {
-      await Speech.speak(text);
-    } catch (error) {
-      console.error('Speech error:', error);
+  // Handle voice commands
+  const handleVoiceCommand = (command) => {
+    switch (command) {
+      case 'start_inspection':
+        if (!isScanning) startScanning();
+        break;
+      case 'stop_inspection':
+        if (isScanning) stopScanning();
+        break;
+      case 'capture':
+        captureViolation('Voice capture');
+        break;
     }
+  };
+
+  const speakInstruction = async (text) => {
+    await VoiceService.speak(text);
   };
 
   const startScanning = () => {
@@ -215,8 +252,24 @@ export default function LiveInspectionScreen({ route, navigation }) {
       >
         {/* Top Bar */}
         <View style={styles.topBar}>
+          {/* Voice State Indicator (like Spectacles) */}
+          <View style={[
+            styles.badge,
+            {
+              backgroundColor: voiceState.state === 'LISTENING' ? '#3B82F6' :
+                              voiceState.state === 'IDLE' ? '#6B7280' : '#10B981'
+            }
+          ]}>
+            <MaterialIcons
+              name={voiceState.state === 'LISTENING' ? 'mic' : 'mic-none'}
+              size={16}
+              color="white"
+            />
+            <Text style={styles.badgeText}>{voiceState.message}</Text>
+          </View>
+
           {isScanning && (
-            <View style={[styles.badge, { backgroundColor: '#10B981' }]}>
+            <View style={[styles.badge, { backgroundColor: '#10B981', marginLeft: 8 }]}>
               <MaterialIcons name="visibility" size={16} color="white" />
               <Text style={styles.badgeText}>SCANNING</Text>
             </View>
