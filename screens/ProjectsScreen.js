@@ -109,7 +109,27 @@ export default function ProjectsScreen({ navigation }) {
             </View>
           ) : (
             projects.map((project) => (
-              <TouchableOpacity key={project.id} style={styles.projectCard}>
+              <TouchableOpacity
+                key={project.id}
+                style={styles.projectCard}
+                onPress={() => {
+                  Alert.alert(
+                    project.name,
+                    'What would you like to do?',
+                    [
+                      {
+                        text: 'Start Inspection',
+                        onPress: () => navigation.navigate('LiveInspection', {
+                          projectId: project.id,
+                          projectName: project.name,
+                          inspectionType: 'building'
+                        })
+                      },
+                      { text: 'Cancel', style: 'cancel' }
+                    ]
+                  );
+                }}
+              >
                 <Text style={styles.projectName}>{project.name}</Text>
                 {project.address && (
                   <Text style={styles.projectAddress}>
