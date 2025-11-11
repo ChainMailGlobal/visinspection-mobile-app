@@ -9,7 +9,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
 import InspectionScreen from './screens/InspectionScreen';
-import RealtimeInspectionScreen from './screens/RealtimeInspectionScreen';
+import LiveInspectionScreen from './screens/LiveInspectionScreen';
 import ReportScreen from './screens/ReportScreen';
 import MaterialIdentificationScreen from './screens/MaterialIdentificationScreen';
 import BuildingCodesScreen from './screens/BuildingCodesScreen';
@@ -47,7 +47,7 @@ export default function App() {
           <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'VIS Eyesight' }} />
           <Stack.Screen name="Inspection" component={InspectionScreen} options={{ title: 'Classic Mode' }} />
-          <Stack.Screen name="RealtimeInspection" component={RealtimeInspectionScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="LiveInspection" component={LiveInspectionScreen} options={{ headerShown: false, title: 'Live AI Inspection' }} />
           <Stack.Screen name="Report" component={ReportScreen} />
           <Stack.Screen name="MaterialIdentification" component={MaterialIdentificationScreen} />
           <Stack.Screen name="BuildingCodes" component={BuildingCodesScreen} />
