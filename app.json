@@ -14,6 +14,14 @@
     ],
     "plugins": [
       [
+        "expo-camera",
+        {
+          "cameraPermission": "VIS Eyesight needs camera access to capture inspection photos and AR overlays with Spectacles.",
+          "microphonePermission": "VIS Eyesight needs microphone access for voice-controlled defect marking.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow VIS Eyesight to use your location to tag inspection addresses."
