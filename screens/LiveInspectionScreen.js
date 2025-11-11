@@ -4,7 +4,7 @@
  * Uses expo-speech-recognition (requires dev build) + expo-camera
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,21 +12,19 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  ScrollView,
 } from 'react-native';
-import { Camera, CameraType } from 'expo-camera';
+import { Camera } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import AIVisionService from '../services/AIVisionService';
 import VoiceService from '../services/VoiceService';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
-import { analyzeLiveInspection } from '../services/McpClient';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function LiveInspectionScreen({ route, navigation }) {
-  const { projectId, inspectionType = 'building', projectName = 'Inspection' } = route.params || {};
+  const { projectId, inspectionType = 'building' } = route.params || {};
 
   const cameraRef = useRef(null);
   const frameIntervalRef = useRef(null);
@@ -247,8 +245,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
       <Camera
         ref={cameraRef}
         style={styles.camera}
-        type={CameraType.back}
-        ratio="16:9"
+        facing="back"
       >
         {/* Top Bar */}
         <View style={styles.topBar}>
