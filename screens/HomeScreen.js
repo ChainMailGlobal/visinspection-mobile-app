@@ -5,10 +5,39 @@ import {
   ScrollView,
   TouchableOpacity,
   Text,
+  Alert,
 } from 'react-native';
 import { Card, Title, Paragraph } from 'react-native-paper';
 
 export default function HomeScreen({ navigation }) {
+  const showInspectionModeSelector = () => {
+    Alert.alert(
+      'Choose Inspection Mode',
+      'Select how you want to inspect:',
+      [
+        {
+          text: 'Classic Mode',
+          onPress: () => navigation.navigate('Inspection'),
+          style: 'default'
+        },
+        {
+          text: '🎙️ AI Voice Mode (NEW)',
+          onPress: () => navigation.navigate('RealtimeInspection', {
+            projectId: null, // Demo mode - will use temporary project
+            inspectionType: 'building',
+            projectName: 'Demo Inspection'
+          }),
+          style: 'default'
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ],
+      { cancelable: true }
+    );
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView}>
@@ -40,7 +69,7 @@ export default function HomeScreen({ navigation }) {
 
           <TouchableOpacity
             style={[styles.phaseCard, styles.phaseCardHighlight]}
-            onPress={() => navigation.navigate('Inspection')}
+            onPress={showInspectionModeSelector}
             activeOpacity={0.8}
           >
             <View style={styles.phaseHeader}>
