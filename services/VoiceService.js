@@ -1,217 +1,67 @@
-import {
-  ExpoSpeechRecognitionModule,
-  addSpeechRecognitionListener,
-} from 'expo-speech-recognition';
 import * as Speech from 'expo-speech';
 
 /**
- * VoiceService - Voice recognition and text-to-speech for hands-free jobsite operation
- * Using expo-speech-recognition for AndroidX compatibility
+ * VoiceService - Text-to-speech for narration (TTS only, no recognition)
+ * Simplified for Expo managed workflow compatibility
  */
 
 class VoiceService {
   constructor() {
-    this.isListening = false;
-    this.onResultCallback = null;
-    this.onErrorCallback = null;
-    this.subscription = null;
-
-    // Voice command patterns for construction inspections
-    this.commands = {
-      // Startup
-      start: ['start', 'begin', 'lets go', 'ready', 'go'],
-
-      // Inspection actions
-      take_photo: ['take photo', 'capture photo', 'take picture', 'photo'],
-      mark_defect: ['mark defect', 'flag issue', 'note problem', 'defect'],
-
-      // Navigation
-      start_inspection: ['start inspection', 'new inspection', 'begin inspection'],
-      end_inspection: ['end inspection', 'finish inspection', 'done', 'end'],
-      save_inspection: ['save inspection', 'save project', 'finish'],
-
-      // Building codes
-      building_codes: ['building codes', 'show codes', 'get codes', 'code requirements'],
-      check_compliance: ['check compliance', 'code check', 'verify code'],
-
-      // Materials
-      identify_material: ['identify material', 'what is this', 'material info'],
-
-      // Reports
-      generate_report: ['generate report', 'create report', 'make report'],
-
-      // General
-      go_home: ['go home', 'home', 'main menu'],
-      help: ['help', 'what can you do', 'commands'],
-    };
+    this.isSpeaking = false;
   }
 
   /**
-   * Match transcription to command
+   * Speak text aloud (TTS only)
    */
-  matchCommand(transcription) {
-    for (const [commandName, patterns] of Object.entries(this.commands)) {
-      for (const pattern of patterns) {
-        if (transcription.includes(pattern)) {
-          return commandName;
-        }
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Start listening for voice commands
-   */
-  async startListening(onResult, onError) {
+  async speak(text) {
     try {
-      this.onResultCallback = onResult;
-      this.onErrorCallback = onError;
-
-      // Request permissions
-      const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (status !== 'granted') {
-        const errorMsg = 'Microphone permission not granted';
-        console.warn('⚠️', errorMsg);
-        if (onError) onError(errorMsg);
-        return false;
-      }
-
-      // Set up listener
-      this.subscription = addSpeechRecognitionListener((event) => {
-        if (event.type === 'start') {
-          console.log('🎤 Voice recognition started');
-          this.isListening = true;
-        } else if (event.type === 'end') {
-          console.log('🎤 Voice recognition ended');
-          this.isListening = false;
-        } else if (event.type === 'result') {
-          const results = event.results;
-          if (results && results.length > 0) {
-            const transcription = results[0].transcript.toLowerCase();
-            console.log('🎤 Transcription:', transcription);
-
-            const command = this.matchCommand(transcription);
-
-            if (this.onResultCallback) {
-              this.onResultCallback({
-                transcription,
-                command,
-                confidence: results[0].confidence || 1,
-              });
-            }
-          }
-        } else if (event.type === 'error') {
-          console.error('❌ Voice recognition error:', event.error);
-          this.isListening = false;
-          if (this.onErrorCallback) {
-            this.onErrorCallback(event.error);
-          }
-        }
-      });
-
-      // Start recognition with continuous mode
-      ExpoSpeechRecognitionModule.start({
-        lang: 'en-US',
-        interimResults: true,
-        maxAlternatives: 1,
-        continuous: true, // Keep listening continuously
-        requiresOnDeviceRecognition: false,
-      });
-
-      return true;
-    } catch (error) {
-      console.error('❌ Failed to start voice recognition:', error);
-      if (onError) onError(error.message);
-      return false;
-    }
-  }
-
-  /**
-   * Stop listening
-   */
-  async stopListening() {
-    try {
-      ExpoSpeechRecognitionModule.stop();
-      this.isListening = false;
-
-      if (this.subscription) {
-        this.subscription.remove();
-        this.subscription = null;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('❌ Failed to stop voice recognition:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Cancel voice recognition
-   */
-  async cancel() {
-    try {
-      ExpoSpeechRecognitionModule.abort();
-      this.isListening = false;
-
-      if (this.subscription) {
-        this.subscription.remove();
-        this.subscription = null;
-      }
-    } catch (error) {
-      console.error('❌ Failed to cancel voice recognition:', error);
-    }
-  }
-
-  /**
-   * Destroy voice recognition
-   */
-  async destroy() {
-    await this.stopListening();
-    this.onResultCallback = null;
-    this.onErrorCallback = null;
-  }
-
-  /**
-   * Speak text (audio feedback) - Works in both Expo Go and Dev Build
-   */
-  async speak(text, options = {}) {
-    try {
+      this.isSpeaking = true;
       await Speech.speak(text, {
         language: 'en-US',
         pitch: 1.0,
         rate: 0.9,
-        ...options,
       });
-      return true;
+      this.isSpeaking = false;
     } catch (error) {
-      console.error('❌ Failed to speak:', error);
-      return false;
+      console.error('Speech error:', error);
+      this.isSpeaking = false;
     }
   }
 
   /**
    * Stop speaking
    */
-  async stopSpeaking() {
+  async stop() {
     try {
       await Speech.stop();
+      this.isSpeaking = false;
     } catch (error) {
-      console.error('❌ Failed to stop speaking:', error);
+      console.error('Speech stop error:', error);
     }
   }
 
   /**
-   * Check if voice recognition is available
+   * No-op methods for backward compatibility with Classic Mode
+   * (These screens expected voice recognition but we removed it)
    */
-  async isAvailable() {
-    try {
-      const result = await ExpoSpeechRecognitionModule.getStateAsync();
-      return result.isAvailable;
-    } catch (error) {
-      return false;
-    }
+  async startListening(callback) {
+    console.log('Voice recognition disabled - TTS only mode');
+    return true;
+  }
+
+  async stopListening() {
+    console.log('Voice recognition disabled - TTS only mode');
+  }
+
+  removeAllListeners() {
+    // No-op
+  }
+
+  /**
+   * Check if currently speaking
+   */
+  getSpeakingStatus() {
+    return this.isSpeaking;
   }
 }
 

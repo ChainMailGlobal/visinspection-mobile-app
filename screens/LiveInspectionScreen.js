@@ -21,6 +21,7 @@ import * as Speech from 'expo-speech';
 import AIVisionService from '../services/AIVisionService';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
+import { analyzeLiveInspection } from '../services/McpClient';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

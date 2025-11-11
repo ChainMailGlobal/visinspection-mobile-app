@@ -35,7 +35,7 @@ class AIVisionService {
 
       // Convert image to base64
       const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: 'base64',
       });
 
       const imageUrl = `data:image/jpeg;base64,${base64Image}`;
@@ -207,7 +207,7 @@ class AIVisionService {
 
       // Convert image to base64
       const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: 'base64',
       });
 
       const imageUrl = `data:image/jpeg;base64,${base64Image}`;
@@ -276,7 +276,7 @@ class AIVisionService {
 
       // Convert image to base64
       const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: 'base64',
       });
 
       const imageUrl = `data:image/jpeg;base64,${base64Image}`;
