@@ -4,7 +4,7 @@
  * Features: REST overlays, GPS auto-project, inspection types, video recording
  */
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
