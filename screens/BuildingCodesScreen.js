@@ -53,7 +53,7 @@ export default function BuildingCodesScreen() {
     setAnalyzing(true);
     try {
       // Convert image to base64 for DPP pre-check
-      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+      const base64Image = await FileSystem.readAsString(imageUri, {
         encoding: 'base64',
       });
       const imageUrl = `data:image/jpeg;base64,${base64Image}`;

@@ -25,16 +25,13 @@ export default function ProjectsScreen({ navigation }) {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
 
-      if (!user) {
-        console.log('No authenticated user');
-        setProjects([]);
-        setLoading(false);
-        return;
-      }
+      // Allow guest mode - use 'guest' as user_id if not authenticated
+      const userId = user?.id || 'guest';
 
       const { data, error } = await supabase
         .from('projects')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -59,10 +56,8 @@ export default function ProjectsScreen({ navigation }) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      if (!user) {
-        Alert.alert('Error', 'You must be logged in to create a project');
-        return;
-      }
+      // Allow guest mode - use 'guest' as user_id if not authenticated
+      const userId = user?.id || 'guest';
 
       const { data, error } = await supabase
         .from('projects')
@@ -71,7 +66,7 @@ export default function ProjectsScreen({ navigation }) {
             name: newProject.name.trim(),
             address: newProject.address.trim() || null,
             project_type: newProject.project_type,
-            user_id: user.id,
+            user_id: userId,
           },
         ])
         .select()
@@ -115,14 +110,46 @@ export default function ProjectsScreen({ navigation }) {
                 onPress={() => {
                   Alert.alert(
                     project.name,
-                    'What would you like to do?',
+                    'Select Inspection Type',
                     [
                       {
-                        text: 'Start Inspection',
+                        text: 'Rough Framing',
                         onPress: () => navigation.navigate('LiveInspection', {
                           projectId: project.id,
                           projectName: project.name,
-                          inspectionType: 'building'
+                          inspectionType: 'rough_framing'
+                        })
+                      },
+                      {
+                        text: 'Electrical',
+                        onPress: () => navigation.navigate('LiveInspection', {
+                          projectId: project.id,
+                          projectName: project.name,
+                          inspectionType: 'electrical'
+                        })
+                      },
+                      {
+                        text: 'Plumbing',
+                        onPress: () => navigation.navigate('LiveInspection', {
+                          projectId: project.id,
+                          projectName: project.name,
+                          inspectionType: 'plumbing'
+                        })
+                      },
+                      {
+                        text: 'Mechanical (HVAC)',
+                        onPress: () => navigation.navigate('LiveInspection', {
+                          projectId: project.id,
+                          projectName: project.name,
+                          inspectionType: 'mechanical'
+                        })
+                      },
+                      {
+                        text: 'Final',
+                        onPress: () => navigation.navigate('LiveInspection', {
+                          projectId: project.id,
+                          projectName: project.name,
+                          inspectionType: 'final'
                         })
                       },
                       { text: 'Cancel', style: 'cancel' }

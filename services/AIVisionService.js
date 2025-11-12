@@ -34,7 +34,7 @@ class AIVisionService {
       this.frameNumber++;
 
       // Convert image to base64
-      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+      const base64Image = await FileSystem.readAsString(imageUri, {
         encoding: 'base64',
       });
 
@@ -206,7 +206,7 @@ class AIVisionService {
       console.log('📋 Analyzing building plan against Honolulu DPP requirements...');
 
       // Convert image to base64
-      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+      const base64Image = await FileSystem.readAsString(imageUri, {
         encoding: 'base64',
       });
 
@@ -275,7 +275,7 @@ class AIVisionService {
       console.log('🔍 Identifying construction material...');
 
       // Convert image to base64
-      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+      const base64Image = await FileSystem.readAsString(imageUri, {
         encoding: 'base64',
       });
 
