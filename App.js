@@ -29,13 +29,24 @@ const theme = {
 };
 
 export default function App() {
-  const [initialRoute, setInitialRoute] = useState('Onboarding');
+  const [initialRoute, setInitialRoute] = useState(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem('hasSeenOnboarding')
-      .then(seen => setInitialRoute(seen === 'true' ? 'Home' : 'Onboarding'))
-      .catch(() => setInitialRoute('Onboarding'));
+      .then(seen => {
+        setInitialRoute(seen === 'true' ? 'Home' : 'Onboarding');
+        setIsReady(true);
+      })
+      .catch(() => {
+        setInitialRoute('Onboarding');
+        setIsReady(true);
+      });
   }, []);
+
+  if (!isReady) {
+    return null; // Or a splash screen component
+  }
 
   return (
     <PaperProvider theme={theme}>
