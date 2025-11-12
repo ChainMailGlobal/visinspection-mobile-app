@@ -10,12 +10,18 @@ export async function analyzeLiveInspection({ projectId, projectName, frame_b64,
   const url = `${BASE}/analyze_live_inspection`;
 
   try {
+    // Implement proper timeout using AbortController
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId, projectName, frame_b64, inspectionType }),
-      timeout: 30000, // 30 second timeout
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -48,6 +54,10 @@ export async function analyzeLiveInspection({ projectId, projectName, frame_b64,
     const narration = data.narration || data.message || "";
     return { overlays, narration };
   } catch (error) {
+    // Handle timeout
+    if (error.name === 'AbortError') {
+      throw new Error("Request timed out. Please check your connection and try again.");
+    }
     // Re-throw with more context if it's a network error
     if (error.message.includes('Failed to fetch') || error.message.includes('Network request failed')) {
       throw new Error("Network connection failed. Please check your internet connection.");

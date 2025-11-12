@@ -278,7 +278,8 @@ export default function LiveInspectionScreen({ route, navigation }) {
         .from('inspection_sessions')
         .update({ status: 'completed', ended_at: new Date().toISOString() })
         .eq('id', sessionIdRef.current)
-        .then(() => console.log('✅ Session completed'));
+        .then(() => console.log('✅ Session completed'))
+        .catch((error) => console.error('Failed to update session status:', error));
     }
   };
 
