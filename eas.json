@@ -17,7 +17,11 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "jsEngine": "jsc"
+      },
+      "ios": {
+        "jsEngine": "jsc"
       },
       "env": {
         "EXPO_PUBLIC_MCP_URL": "@secret:EXPO_PUBLIC_MCP_URL",
