@@ -39,7 +39,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.visinc.eyesight",
-      "jsEngine": "jsc",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -58,8 +57,7 @@
         "RECORD_AUDIO",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ],
-      "jsEngine": "jsc"
+      ]
     },
     "extra": {
       "eas": {

@@ -17,6 +17,7 @@ import {
 import { Camera } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import * as ImageManipulator from 'expo-image-manipulator';
 import VoiceService from '../services/VoiceService';
@@ -40,18 +41,18 @@ export default function LiveInspectionScreen({ route, navigation }) {
   const cameraRef = useRef(null);
   const frameIntervalRef = useRef(null);
   const sessionIdRef = useRef(null);
+  const analyzingRef = useRef(false); // Use ref to prevent stale closure
 
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const [locationPerm, requestLocationPerm] = Location.useForegroundPermissions();
   const [isScanning, setIsScanning] = useState(false);
   const [violations, setViolations] = useState([]);
   const [overlays, setOverlays] = useState([]);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false); // Keep for UI display
   const [projectId, setProjectId] = useState(existingProjectId);
   const [projectAddress, setProjectAddress] = useState('');
   const [inspectionType, setInspectionType] = useState('building');
   const [showTypePicker, setShowTypePicker] = useState(!existingProjectId);
-  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
 
   // GPS Auto-Project Creation
   useEffect(() => {
@@ -59,6 +60,26 @@ export default function LiveInspectionScreen({ route, navigation }) {
       createProjectFromGPS();
     }
   }, [locationPerm]);
+
+  // Cleanup camera when component unmounts
+  useEffect(() => {
+    return () => {
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
+      analyzingRef.current = false;
+    };
+  }, []);
+
+  // Stop scanning when screen loses focus (user navigates away or backgrounds app)
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        stopScanning();
+      };
+    }, [])
+  );
 
   const createProjectFromGPS = async () => {
     try {
@@ -128,9 +149,10 @@ export default function LiveInspectionScreen({ route, navigation }) {
     setIsScanning(true);
 
     const captureAndAnalyze = async () => {
-      if (!cameraRef.current || analyzing) return;
+      if (!cameraRef.current || analyzingRef.current) return;
 
       try {
+        analyzingRef.current = true;
         setAnalyzing(true);
 
         // Capture frame
@@ -182,9 +204,11 @@ export default function LiveInspectionScreen({ route, navigation }) {
           setOverlays([]);
         }
 
+        analyzingRef.current = false;
         setAnalyzing(false);
       } catch (error) {
         console.error('Analysis error:', error);
+        analyzingRef.current = false;
         setAnalyzing(false);
       }
     };
