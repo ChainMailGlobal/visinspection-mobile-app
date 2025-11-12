@@ -20,10 +20,10 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_MCP_URL": "@secret:EXPO_PUBLIC_MCP_URL",
-        "EXPO_PUBLIC_SUPABASE_URL": "@secret:EXPO_PUBLIC_SUPABASE_URL",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "@secret:EXPO_PUBLIC_SUPABASE_ANON_KEY",
-        "EXPO_PUBLIC_GOOGLE_AI_API_KEY": "@secret:EXPO_PUBLIC_GOOGLE_AI_API_KEY"
+        "EXPO_PUBLIC_SUPABASE_URL": "https://fnnwjnkttgnprwguwfnd.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZubndqbmt0dGducHJ3Z3V3Zm5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MzkzNzgsImV4cCI6MjA3NDMxNTM3OH0.tE2baj7JXgsosYWOjyxlgRpVi13a_JlpkW4GIFRHjwY",
+        "EXPO_PUBLIC_MCP_URL": "https://fnnwjnkttgnprwguwfnd.supabase.co/functions/v1/mcp-server",
+        "EXPO_PUBLIC_GOOGLE_AI_API_KEY": "AIzaSyC7L3Dd2mD5EjoP8h6TpLgMX7u9PUguDM8"
       }
     },
     "production": {

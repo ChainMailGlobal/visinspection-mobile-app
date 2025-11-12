@@ -21,7 +21,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import * as ImageManipulator from 'expo-image-manipulator';
 import VoiceService from '../services/VoiceService';
-import { analyzeLiveInspection } from '../services/McpClient';
+import { analyzeLiveInspection, health } from '../services/McpClient';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
 
@@ -42,6 +42,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
   const frameIntervalRef = useRef(null);
   const sessionIdRef = useRef(null);
   const analyzingRef = useRef(false); // Use ref to prevent stale closure
+  const consecutiveErrorsRef = useRef(0); // Track consecutive errors for backoff
 
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const [locationPerm, requestLocationPerm] = Location.useForegroundPermissions();
@@ -128,6 +129,17 @@ export default function LiveInspectionScreen({ route, navigation }) {
   const startScanning = async () => {
     if (isScanning) return;
 
+    // Check MCP backend health before starting
+    const healthStatus = await health();
+    if (healthStatus !== 200) {
+      Alert.alert(
+        'Connection Error',
+        'Cannot connect to AI inspection service. Please check your internet connection and try again.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     // Create inspection session
     const { data: user } = await supabase.auth.getUser();
     if (user.user && projectId) {
@@ -147,6 +159,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
     }
 
     setIsScanning(true);
+    consecutiveErrorsRef.current = 0; // Reset error counter when starting new scan
 
     const captureAndAnalyze = async () => {
       if (!cameraRef.current || analyzingRef.current) return;
@@ -155,18 +168,18 @@ export default function LiveInspectionScreen({ route, navigation }) {
         analyzingRef.current = true;
         setAnalyzing(true);
 
-        // Capture frame
+        // Capture frame with reduced quality to minimize memory usage
         const photo = await cameraRef.current.takePictureAsync({
           base64: true,
-          quality: 0.6,
+          quality: 0.4,
           skipProcessing: true,
         });
 
-        // Resize for faster upload
+        // Resize for faster upload with lower compression
         const resized = await ImageManipulator.manipulateAsync(
           photo.uri,
           [{ resize: { width: 960 } }],
-          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          { compress: 0.4, format: ImageManipulator.SaveFormat.JPEG, base64: true }
         );
 
         // Call MCP REST endpoint
@@ -176,6 +189,9 @@ export default function LiveInspectionScreen({ route, navigation }) {
           frame_b64: resized.base64,
           inspectionType,
         });
+
+        // Reset error counter on success
+        consecutiveErrorsRef.current = 0;
 
         // Update overlays
         if (result.overlays && result.overlays.length > 0) {
@@ -210,12 +226,42 @@ export default function LiveInspectionScreen({ route, navigation }) {
         console.error('Analysis error:', error);
         analyzingRef.current = false;
         setAnalyzing(false);
+
+        // Increment error counter
+        consecutiveErrorsRef.current += 1;
+
+        // If too many consecutive errors, stop scanning and alert user
+        if (consecutiveErrorsRef.current >= 5) {
+          stopScanning();
+          Alert.alert(
+            'Connection Lost',
+            'Lost connection to AI inspection service after multiple attempts. Please check your connection and try again.',
+            [{ text: 'OK' }]
+          );
+          consecutiveErrorsRef.current = 0;
+        }
       }
     };
 
-    // Analyze every 2 seconds
-    frameIntervalRef.current = setInterval(captureAndAnalyze, 2000);
-    captureAndAnalyze(); // First frame immediately
+    // Analyze every 4 seconds (reduced from 2s to minimize memory pressure)
+    // Wrap interval calls to prevent unhandled promise rejections from crashing the app
+    frameIntervalRef.current = setInterval(async () => {
+      try {
+        await captureAndAnalyze();
+      } catch (error) {
+        console.error('Frame analysis failed, skipping frame:', error);
+        // Don't crash, just skip this frame and continue
+      }
+    }, 4000);
+
+    // First frame immediately (also wrapped)
+    (async () => {
+      try {
+        await captureAndAnalyze();
+      } catch (error) {
+        console.error('Initial frame analysis failed:', error);
+      }
+    })();
   };
 
   const stopScanning = () => {
@@ -224,6 +270,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
       frameIntervalRef.current = null;
     }
     setIsScanning(false);
+    consecutiveErrorsRef.current = 0; // Reset error counter when stopping
 
     // Update session status
     if (sessionIdRef.current) {
