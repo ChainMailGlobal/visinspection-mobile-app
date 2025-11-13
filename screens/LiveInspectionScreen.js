@@ -282,6 +282,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
 
     // Update session status
     if (sessionIdRef.current) {
+      const supabase = getSupabaseClient();
       supabase
         .from('inspection_sessions')
         .update({ status: 'completed', ended_at: new Date().toISOString() })

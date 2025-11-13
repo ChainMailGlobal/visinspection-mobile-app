@@ -7,8 +7,18 @@ import getSupabaseClient from './supabaseClient';
 
 class MCPService {
   constructor() {
-    this.supabase = getSupabaseClient();
+    this._supabase = null; // Lazy load - don't call getSupabaseClient() yet
     this.userId = null;
+  }
+
+  /**
+   * Get Supabase client (lazy initialization)
+   */
+  get supabase() {
+    if (!this._supabase) {
+      this._supabase = getSupabaseClient();
+    }
+    return this._supabase;
   }
 
   /**

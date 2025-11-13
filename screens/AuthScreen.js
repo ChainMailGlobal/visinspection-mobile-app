@@ -7,9 +7,15 @@ export default function AuthScreen({ navigation, route }) {
   const mode = route?.params?.mode || 'login';
 
   const handleGuestMode = async () => {
-    await AsyncStorage.setItem('hasSeenOnboarding', 'true');
-    await AsyncStorage.setItem('authMode', 'guest');
-    navigation.replace('Home');
+    try {
+      await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+      await AsyncStorage.setItem('authMode', 'guest');
+      navigation.replace('Home');
+    } catch (error) {
+      console.error('Failed to save guest mode:', error);
+      // Still navigate even if storage fails
+      navigation.replace('Home');
+    }
   };
 
   return (

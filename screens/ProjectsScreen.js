@@ -3,8 +3,6 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal,
 import getSupabaseClient from '../services/supabaseClient';
 import { MaterialIcons } from '@expo/vector-icons';
 
-const supabase = getSupabaseClient();
-
 export default function ProjectsScreen({ navigation }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +20,7 @@ export default function ProjectsScreen({ navigation }) {
   const fetchProjects = async () => {
     try {
       setLoading(true);
+      const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
 
       // Allow guest mode - use 'guest' as user_id if not authenticated
@@ -53,6 +52,7 @@ export default function ProjectsScreen({ navigation }) {
     }
 
     try {
+      const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
 
       // Allow guest mode - use 'guest' as user_id if not authenticated
