@@ -1,11 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share, ActivityIndicator } from 'react-native';
-import { Button } from 'react-native-paper';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import getSupabaseClient from '../services/supabaseClient';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Share,
+  ActivityIndicator,
+} from "react-native";
+import { Button } from "react-native-paper";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import getSupabaseClient from "../services/supabaseClient";
 
 export default function ReportScreen({ route, navigation }) {
   const [generating, setGenerating] = useState(false);
@@ -13,9 +22,19 @@ export default function ReportScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState(null);
 
-  const { projectId, sessionId, violations: routeViolations } = route?.params || {};
+  const {
+    projectId,
+    sessionId,
+    violations: routeViolations,
+  } = route?.params || {};
   const inspectionData = route?.params || {};
-  const { photos = [], defects = [], location, jurisdiction, duration } = inspectionData;
+  const {
+    photos = [],
+    defects = [],
+    location,
+    jurisdiction,
+    duration,
+  } = inspectionData;
 
   // Fetch report data from database if projectId/sessionId provided
   useEffect(() => {
@@ -35,59 +54,65 @@ export default function ReportScreen({ route, navigation }) {
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
-      
+
       // Fetch session
       const { data: session } = await supabase
-        .from('inspection_sessions')
-        .select('*')
-        .eq('id', sessionId)
+        .from("inspection_sessions")
+        .select("*")
+        .eq("id", sessionId)
         .single();
 
       // Fetch violations
       const { data: violations } = await supabase
-        .from('inspection_violations')
-        .select('*')
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: false });
+        .from("inspection_violations")
+        .select("*")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: false });
 
       // Fetch captured violations (photos)
       const { data: capturedViolations } = await supabase
-        .from('captured_violations')
-        .select('*')
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: false });
+        .from("captured_violations")
+        .select("*")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: false });
 
       // Fetch project for location
-      const { data: project } = projectId ? await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', projectId)
-        .single() : { data: null };
+      const { data: project } = projectId
+        ? await supabase
+            .from("projects")
+            .select("*")
+            .eq("id", projectId)
+            .single()
+        : { data: null };
 
       setReportData({
         session,
         violations: violations || [],
         capturedViolations: capturedViolations || [],
         project,
-        photos: capturedViolations?.map(cv => cv.photo_url) || [],
-        defects: violations?.map(v => ({
-          category: v.severity,
-          severity: v.severity,
-          issues: [v.violation_description],
-          code: v.code_reference,
-          timestamp: v.created_at,
-        })) || [],
-        location: project ? {
-          latitude: project.latitude,
-          longitude: project.longitude,
-        } : null,
-        jurisdiction: 'Honolulu Building Code',
-        duration: session ? 
-          (new Date(session.ended_at || Date.now()) - new Date(session.started_at)) : 
-          null,
+        photos: capturedViolations?.map((cv) => cv.photo_url) || [],
+        defects:
+          violations?.map((v) => ({
+            category: v.severity,
+            severity: v.severity,
+            issues: [v.violation_description],
+            code: v.code_reference,
+            timestamp: v.created_at,
+          })) || [],
+        location: project
+          ? {
+              latitude: project.latitude,
+              longitude: project.longitude,
+            }
+          : null,
+        jurisdiction: "Honolulu Building Code",
+        duration: session
+          ? new Date(session.ended_at || Date.now()) -
+            new Date(session.started_at)
+          : null,
       });
     } catch (error) {
-      console.error('Failed to fetch report data:', error);
+      console.error("Failed to fetch report data:", error);
       // Fall back to route params
       setReportData({
         violations: routeViolations || [],
@@ -107,14 +132,15 @@ export default function ReportScreen({ route, navigation }) {
         photos: photos || [],
         defects: defects || routeViolations || [],
         location,
-        jurisdiction: jurisdiction || 'Honolulu Building Code',
+        jurisdiction: jurisdiction || "Honolulu Building Code",
         duration,
       };
 
       const finalPhotos = data.photos || photos || [];
       const finalDefects = data.defects || defects || routeViolations || [];
       const finalLocation = data.location || location;
-      const finalJurisdiction = data.jurisdiction || jurisdiction || 'Honolulu Building Code';
+      const finalJurisdiction =
+        data.jurisdiction || jurisdiction || "Honolulu Building Code";
       const finalDuration = data.duration || duration;
       const htmlContent = `
 <!DOCTYPE html>
@@ -233,13 +259,25 @@ export default function ReportScreen({ route, navigation }) {
       <div class="info-label">Jurisdiction:</div>
       <div class="info-value">${finalJurisdiction}</div>
 
-      ${finalLocation ? `
+      ${
+        finalLocation
+          ? `
       <div class="info-label">Location:</div>
-      <div class="info-value">${finalLocation.latitude ? `Lat: ${finalLocation.latitude.toFixed(6)}, Lng: ${finalLocation.longitude.toFixed(6)}` : finalLocation.address || 'N/A'}</div>
-      ` : ''}
+      <div class="info-value">${
+        finalLocation.latitude
+          ? `Lat: ${finalLocation.latitude.toFixed(
+              6
+            )}, Lng: ${finalLocation.longitude.toFixed(6)}`
+          : finalLocation.address || "N/A"
+      }</div>
+      `
+          : ""
+      }
 
       <div class="info-label">Duration:</div>
-      <div class="info-value">${finalDuration ? Math.floor(finalDuration / 60000) + ' minutes' : 'N/A'}</div>
+      <div class="info-value">${
+        finalDuration ? Math.floor(finalDuration / 60000) + " minutes" : "N/A"
+      }</div>
 
       <div class="info-label">Photos Captured:</div>
       <div class="info-value">${finalPhotos.length}</div>
@@ -249,49 +287,86 @@ export default function ReportScreen({ route, navigation }) {
     </div>
   </div>
 
-  ${finalDefects.length > 0 ? `
+  ${
+    finalDefects.length > 0
+      ? `
   <div class="section">
-    <div class="section-title">Defects & Issues Found (${finalDefects.length})</div>
-    ${finalDefects.map((defect, index) => `
+    <div class="section-title">Defects & Issues Found (${
+      finalDefects.length
+    })</div>
+    ${finalDefects
+      .map(
+        (defect, index) => `
       <div class="defect-card">
-        <div class="defect-title">Defect ${index + 1}: ${defect.category || 'General'}</div>
-        <div class="defect-category">Severity: ${(defect.severity || 'yellow').toUpperCase()}</div>
-        <div class="defect-category">Time: ${new Date(defect.timestamp).toLocaleTimeString()}</div>
-        ${defect.issues && defect.issues.length > 0 ? `
+        <div class="defect-title">Defect ${index + 1}: ${
+          defect.category || "General"
+        }</div>
+        <div class="defect-category">Severity: ${(
+          defect.severity || "yellow"
+        ).toUpperCase()}</div>
+        <div class="defect-category">Time: ${new Date(
+          defect.timestamp
+        ).toLocaleTimeString()}</div>
+        ${
+          defect.issues && defect.issues.length > 0
+            ? `
           <div style="margin-top: 10px;">
             <strong>Issues:</strong>
-            ${defect.issues.map(issue => `
+            ${defect.issues
+              .map(
+                (issue) => `
               <div class="defect-issue">• ${issue}</div>
-            `).join('')}
+            `
+              )
+              .join("")}
           </div>
-        ` : ''}
-        ${defect.note ? `
+        `
+            : ""
+        }
+        ${
+          defect.note
+            ? `
           <div style="margin-top: 10px;">
             <strong>Notes:</strong> ${defect.note}
           </div>
-        ` : ''}
-        ${defect.category !== 'General' ? `
+        `
+            : ""
+        }
+        ${
+          defect.category !== "General"
+            ? `
           <div class="permit-box">
-            <div class="permit-title">Permit Required: ${getPermitType(defect.category)}</div>
+            <div class="permit-title">Permit Required: ${getPermitType(
+              defect.category
+            )}</div>
             <div>${getPermitNotes(defect.category)}</div>
           </div>
-        ` : ''}
+        `
+            : ""
+        }
       </div>
-    `).join('')}
+    `
+      )
+      .join("")}
   </div>
-  ` : `
+  `
+      : `
   <div class="section">
     <div class="section-title">Defects & Issues Found</div>
     <p style="color: #00CC66; font-weight: bold;">✓ No issues detected during inspection</p>
   </div>
-  `}
+  `
+  }
 
   <div class="section">
     <div class="section-title">Code Compliance Summary</div>
     <p>This inspection was performed against <strong>${finalJurisdiction}</strong> requirements.</p>
-    <p>${finalDefects.length === 0
-      ? 'All inspected areas appear to comply with building code requirements.'
-      : `${finalDefects.length} potential issue${finalDefects.length > 1 ? 's' : ''} identified that may require attention.`
+    <p>${
+      finalDefects.length === 0
+        ? "All inspected areas appear to comply with building code requirements."
+        : `${finalDefects.length} potential issue${
+            finalDefects.length > 1 ? "s" : ""
+          } identified that may require attention.`
     }</p>
   </div>
 
@@ -309,41 +384,44 @@ export default function ReportScreen({ route, navigation }) {
       setGenerating(false);
 
       Alert.alert(
-        'Report Generated',
-        'Your inspection report has been created.',
+        "Report Generated",
+        "Your inspection report has been created.",
         [
-          { text: 'View', onPress: () => viewReport(uri) },
-          { text: 'Share', onPress: () => shareReport(uri) },
-          { text: 'OK' }
+          { text: "View", onPress: () => viewReport(uri) },
+          { text: "Share", onPress: () => shareReport(uri) },
+          { text: "OK" },
         ]
       );
     } catch (error) {
-      console.error('PDF generation error:', error);
-      Alert.alert('Error', 'Failed to generate report. Please try again.');
+      console.error("PDF generation error:", error);
+      Alert.alert("Error", "Failed to generate report. Please try again.");
       setGenerating(false);
     }
   };
 
   const getPermitType = (category) => {
     const permits = {
-      electrical: 'Electrical Permit',
-      plumbing: 'Plumbing Permit',
-      structural: 'Building Permit',
-      'fire safety': 'Fire Safety Permit',
-      HVAC: 'Mechanical Permit',
+      electrical: "Electrical Permit",
+      plumbing: "Plumbing Permit",
+      structural: "Building Permit",
+      "fire safety": "Fire Safety Permit",
+      HVAC: "Mechanical Permit",
     };
-    return permits[category] || 'Permit may be required';
+    return permits[category] || "Permit may be required";
   };
 
   const getPermitNotes = (category) => {
     const notes = {
-      electrical: 'All electrical work requires permit per Honolulu Building Code',
-      plumbing: 'All plumbing alterations require permit per Honolulu Building Code',
-      structural: 'Structural work requires building permit and engineer approval',
-      'fire safety': 'Fire protection systems require Fire Department approval',
-      HVAC: 'HVAC installation requires mechanical permit',
+      electrical:
+        "All electrical work requires permit per Honolulu Building Code",
+      plumbing:
+        "All plumbing alterations require permit per Honolulu Building Code",
+      structural:
+        "Structural work requires building permit and engineer approval",
+      "fire safety": "Fire protection systems require Fire Department approval",
+      HVAC: "HVAC installation requires mechanical permit",
     };
-    return notes[category] || 'Check with City & County of Honolulu';
+    return notes[category] || "Check with City & County of Honolulu";
   };
 
   const viewReport = async (uri) => {
@@ -355,25 +433,25 @@ export default function ReportScreen({ route, navigation }) {
   const shareReport = async (uri) => {
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Share Inspection Report',
+        mimeType: "application/pdf",
+        dialogTitle: "Share Inspection Report",
       });
     }
   };
 
   const deleteReport = () => {
     Alert.alert(
-      'Delete Report',
-      'Are you sure you want to delete this inspection data?',
+      "Delete Report",
+      "Are you sure you want to delete this inspection data?",
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: "Delete",
+          style: "destructive",
           onPress: () => {
-            navigation.replace('Home');
-          }
-        }
+            navigation.replace("Home");
+          },
+        },
       ]
     );
   };
@@ -393,22 +471,30 @@ export default function ReportScreen({ route, navigation }) {
     photos: photos || [],
     defects: defects || routeViolations || [],
     location,
-    jurisdiction: jurisdiction || 'Honolulu Building Code',
+    jurisdiction: jurisdiction || "Honolulu Building Code",
   };
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Generate Report</Text>
-        <Text style={styles.subtitle}>Auto-generated inspection documentation</Text>
+        <Text style={styles.subtitle}>
+          Auto-generated inspection documentation
+        </Text>
       </View>
 
       <View style={styles.section}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Inspection Summary</Text>
-          <Text style={styles.summaryText}>Photos: {displayData.photos?.length || 0}</Text>
-          <Text style={styles.summaryText}>Defects: {displayData.defects?.length || 0}</Text>
-          <Text style={styles.summaryText}>Jurisdiction: {displayData.jurisdiction || 'Honolulu'}</Text>
+          <Text style={styles.summaryText}>
+            Photos: {displayData.photos?.length || 0}
+          </Text>
+          <Text style={styles.summaryText}>
+            Defects: {displayData.defects?.length || 0}
+          </Text>
+          <Text style={styles.summaryText}>
+            Jurisdiction: {displayData.jurisdiction || "Honolulu"}
+          </Text>
         </View>
 
         <TouchableOpacity
@@ -417,21 +503,30 @@ export default function ReportScreen({ route, navigation }) {
           disabled={generating}
         >
           <Text style={styles.generateButtonText}>
-            {generating ? 'GENERATING PDF...' : 'CREATE PDF REPORT'}
+            {generating ? "GENERATING PDF..." : "CREATE PDF REPORT"}
           </Text>
         </TouchableOpacity>
 
         {reportUri && (
           <>
-            <TouchableOpacity style={styles.actionButton} onPress={() => viewReport(reportUri)}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => viewReport(reportUri)}
+            >
               <Text style={styles.actionButtonText}>VIEW REPORT</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton} onPress={() => shareReport(reportUri)}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => shareReport(reportUri)}
+            >
               <Text style={styles.actionButtonText}>SHARE REPORT</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={deleteReport}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={deleteReport}
+            >
               <Text style={styles.actionButtonText}>DELETE</Text>
             </TouchableOpacity>
           </>
@@ -442,12 +537,10 @@ export default function ReportScreen({ route, navigation }) {
         <Text style={styles.sectionTitle}>Report Includes</Text>
         <View style={styles.infoCard}>
           <Text style={styles.infoText}>
-            • All inspection photos with GPS tags{'\n'}
-            • AI-detected discrepancies{'\n'}
-            • Code compliance notes{'\n'}
-            • Voice-recorded defect marks{'\n'}
-            • Permit requirements for each category{'\n'}
-            • Professional formatting
+            • All inspection photos with GPS tags{"\n"}• AI-detected
+            discrepancies{"\n"}• Code compliance notes{"\n"}• Voice-recorded
+            defect marks{"\n"}• Permit requirements for each category{"\n"}•
+            Professional formatting
           </Text>
         </View>
       </View>
@@ -458,99 +551,99 @@ export default function ReportScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#666666',
+    color: "#666666",
   },
   header: {
     padding: 24,
-    backgroundColor: '#F8F8F8',
+    backgroundColor: "#F8F8F8",
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    borderBottomColor: "#E5E5E5",
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontWeight: "700",
+    color: "#1A1A1A",
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#666666',
+    color: "#666666",
   },
   section: {
     padding: 16,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontWeight: "600",
+    color: "#1A1A1A",
     marginBottom: 12,
   },
   summaryCard: {
-    backgroundColor: '#F8F8F8',
+    backgroundColor: "#F8F8F8",
     borderRadius: 8,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: "#E5E5E5",
   },
   summaryTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontWeight: "600",
+    color: "#1A1A1A",
     marginBottom: 12,
   },
   summaryText: {
     fontSize: 14,
-    color: '#666666',
+    color: "#666666",
     marginBottom: 6,
   },
   generateButton: {
-    backgroundColor: '#0066CC',
+    backgroundColor: "#0066CC",
     borderRadius: 8,
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 12,
   },
   generateButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   actionButton: {
-    backgroundColor: '#00CC66',
+    backgroundColor: "#00CC66",
     borderRadius: 8,
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 12,
   },
   deleteButton: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: "#FF3B30",
   },
   actionButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   infoCard: {
-    backgroundColor: '#F0F7FF',
+    backgroundColor: "#F0F7FF",
     borderRadius: 8,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#0066CC',
+    borderColor: "#0066CC",
   },
   infoText: {
     fontSize: 14,
-    color: '#0066CC',
+    color: "#0066CC",
     lineHeight: 24,
   },
 });

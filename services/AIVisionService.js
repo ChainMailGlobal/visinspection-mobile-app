@@ -1,5 +1,5 @@
 import { MCP_URL, SUPABASE_ANON_KEY, OPENAI_API_KEY } from '../config/env';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 /**
  * AIVisionService - Real-time construction inspection using MCP Backend
