@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
-import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
+import getSupabaseClient from '../services/supabaseClient';
 import { MaterialIcons } from '@expo/vector-icons';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = getSupabaseClient();
 
 export default function ProjectsScreen({ navigation }) {
   const [projects, setProjects] = useState([]);

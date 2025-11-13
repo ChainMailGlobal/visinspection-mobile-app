@@ -1,6 +1,13 @@
 // services/McpClient.js
-const BASE = process.env.EXPO_PUBLIC_MCP_URL;
-if (!BASE) console.warn("EXPO_PUBLIC_MCP_URL is not set");
+import { MCP_URL, isConfigValid } from '../config/env';
+
+const BASE = MCP_URL;
+
+// Validate MCP URL on module load
+const config = isConfigValid();
+if (!config.mcp) {
+  console.error('[McpClient] Invalid MCP_URL configuration:', BASE);
+}
 
 export async function analyzeLiveInspection({ projectId, projectName, frame_b64, inspectionType }) {
   if (!BASE) {

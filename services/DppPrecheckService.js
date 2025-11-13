@@ -1,7 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
+import getSupabaseClient from './supabaseClient';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = getSupabaseClient();
 
 /**
  * Run Honolulu DPP Pre-Check with actual code citations and page numbers

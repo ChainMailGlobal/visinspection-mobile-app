@@ -1,17 +1,13 @@
-import { createClient } from '@supabase/supabase-js';
+import getSupabaseClient from './supabaseClient';
 
 /**
  * MCPService - Model Context Protocol integration with Supabase backend
  * Provides AI tools for building codes, violations, material identification, etc.
  */
 
-// TODO: Replace with actual Supabase credentials
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
-
 class MCPService {
   constructor() {
-    this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    this.supabase = getSupabaseClient();
     this.userId = null;
   }
 

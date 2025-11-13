@@ -22,10 +22,9 @@ import * as Location from 'expo-location';
 import * as ImageManipulator from 'expo-image-manipulator';
 import VoiceService from '../services/VoiceService';
 import { analyzeLiveInspection, health } from '../services/McpClient';
-import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/env';
+import getSupabaseClient from '../services/supabaseClient';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = getSupabaseClient();
 
 const INSPECTION_TYPES = [
   { id: 'building', label: 'Building/Structural', icon: 'business' },
