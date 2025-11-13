@@ -1,5 +1,5 @@
 // services/McpClient.js
-import { MCP_URL, isConfigValid } from '../config/env';
+import { MCP_URL, SUPABASE_ANON_KEY, isConfigValid } from '../config/env';
 
 const BASE = MCP_URL;
 
@@ -49,7 +49,11 @@ export async function analyzeLiveInspection({
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -117,7 +121,12 @@ export async function health() {
 
   const url = `${BASE}/health`;
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    });
     return r.status;
   } catch (error) {
     console.error('[McpClient] Health check failed:', error.message);

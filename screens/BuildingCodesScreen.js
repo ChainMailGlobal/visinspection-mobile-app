@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } fr
 import { TextInput } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import PlanStorageService from '../services/PlanStorageService';
 import { runDppPrecheck } from '../services/DppPrecheckService';
 import * as FileSystem from 'expo-file-system';
@@ -40,22 +41,108 @@ export default function BuildingCodesScreen() {
       });
 
       if (!result.canceled) {
-        setPlanImage(result.assets[0].uri);
-        analyzePlan(result.assets[0].uri);
+        const file = result.assets[0];
+        const fileUri = file.uri;
+        const mimeType = file.mimeType || '';
+        const fileName = file.name || '';
+
+        // Check file type
+        const isPDF = mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
+        const isImage = mimeType.startsWith('image/') || 
+                       imageUri.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i);
+
+        if (isPDF) {
+          // PDFs need special handling - try to convert or show helpful message
+          Alert.alert(
+            'PDF Detected',
+            'PDF files need to be converted to images for analysis.\n\nOptions:\n• Use "SCAN PLANS" to take photos\n• Convert PDF pages to JPG/PNG first\n• Upload individual image files',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Try Anyway', 
+                onPress: () => {
+                  // Attempt to analyze - might work if backend can handle it
+                  setPlanImage(fileUri);
+                  analyzePlan(fileUri);
+                }
+              }
+            ]
+          );
+          return;
+        }
+
+        if (!isImage) {
+          Alert.alert(
+            'Unsupported File Type',
+            `File type "${mimeType || 'unknown'}" is not supported.\n\nSupported formats:\n• Images: JPG, PNG, GIF, WebP\n• PDFs: Need conversion to images`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        // For images, proceed with analysis
+        setPlanImage(fileUri);
+        analyzePlan(fileUri);
       }
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert('Upload failed', 'Please try again');
+      Alert.alert('Upload failed', error.message || 'Please try again');
     }
   };
 
   const analyzePlan = async (imageUri) => {
     setAnalyzing(true);
     try {
+      // Check if file exists and is readable
+      const fileInfo = await FileSystem.getInfoAsync(imageUri);
+      if (!fileInfo.exists) {
+        throw new Error('File not found. Please try uploading again.');
+      }
+
+      // Detect file type from URI (more flexible check)
+      const isImage = imageUri.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i) || 
+                     imageUri.startsWith('data:image/') ||
+                     imageUri.startsWith('file://');
+
+      // Allow PDFs to attempt processing (will fail gracefully with clear error)
+      const isPDF = imageUri.toLowerCase().endsWith('.pdf');
+      
+      if (!isImage && !isPDF) {
+        throw new Error('Unsupported file type. Please use images (JPG, PNG, GIF, WebP) or PDFs.');
+      }
+      
+      if (isPDF) {
+        throw new Error('PDF files cannot be analyzed directly. Please convert PDF pages to images (JPG/PNG) first, or use the camera to scan plan pages.');
+      }
+
       // Convert image to base64 for DPP pre-check
-      const base64Image = await FileSystem.readAsString(imageUri, {
-        encoding: 'base64',
-      });
+      // Use ImageManipulator to ensure proper format and compression
+      let base64Image;
+      try {
+        const manipulated = await ImageManipulator.manipulateAsync(
+          imageUri,
+          [{ resize: { width: 2000 } }], // Resize to reasonable size for analysis
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        base64Image = manipulated.base64;
+      } catch (manipError) {
+        // Fallback to direct file read if manipulation fails
+        try {
+          // Fallback: try direct read (works for images)
+          // Note: readAsString is synchronous but we're in async function, so it's fine
+          base64Image = FileSystem.readAsString(imageUri, {
+            encoding: 'base64',
+          });
+        } catch (readError) {
+          console.error('File read error:', readError);
+          throw new Error('Failed to process image. Please ensure it is a valid image file (JPG, PNG, etc.). PDFs are not supported.');
+        }
+      }
+
+      if (!base64Image) {
+        throw new Error('Failed to read image file. Please try a different file.');
+      }
+
       const imageUrl = `data:image/jpeg;base64,${base64Image}`;
 
       // Run actual DPP pre-check with code citations and page numbers

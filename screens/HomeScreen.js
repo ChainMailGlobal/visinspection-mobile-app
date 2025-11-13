@@ -108,6 +108,13 @@ export default function HomeScreen({ navigation }) {
           >
             <Text style={styles.actionButtonText}>Generate Report</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#F59E0B' }]}
+            onPress={() => navigation.navigate('Diagnostics')}
+          >
+            <Text style={styles.actionButtonText}>Run Diagnostics</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Value Prop */}

@@ -1,20 +1,32 @@
-import { MCP_URL, SUPABASE_ANON_KEY } from '../config/env';
+import { MCP_URL, SUPABASE_ANON_KEY, OPENAI_API_KEY } from '../config/env';
 import * as FileSystem from 'expo-file-system';
 
 /**
  * AIVisionService - Real-time construction inspection using MCP Backend
  * Uses mode-based AI: Gemini Flash for speed (0.5-1s) during live inspection
  * Falls back to direct OpenAI if MCP unavailable
+ * FIXED: Proper race condition handling and OpenAI fallback
  */
 
 class AIVisionService {
   constructor() {
     this.mcpUrl = MCP_URL;
     this.supabaseKey = SUPABASE_ANON_KEY;
-    this.analyzing = false;
+    this.openaiKey = OPENAI_API_KEY;
+
+    // Race condition fix: use promise-based locking
+    this.currentAnalysis = null;
+
     this.lastAnalysis = null;
-    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     this.frameNumber = 0;
+
+    // Retry configuration
+    this.retryConfig = {
+      maxRetries: 3,
+      baseDelay: 1000,
+      maxDelay: 5000
+    };
   }
 
   /**
@@ -24,13 +36,30 @@ class AIVisionService {
    * @returns {Promise<object>} Analysis results with materials, compliance, and narration
    */
   async analyzeFrame(imageUri, context = {}) {
-    if (this.analyzing) {
-      console.log('⏳ Analysis already in progress, skipping...');
-      return null;
+    // ===================================================================
+    // FIX: Proper race condition handling using promise-based locking
+    // ===================================================================
+    if (this.currentAnalysis) {
+      console.log('⏳ Analysis already in progress, returning existing promise...');
+      return this.currentAnalysis;
     }
 
+    // Create analysis promise
+    this.currentAnalysis = this._performAnalysis(imageUri, context)
+      .finally(() => {
+        this.currentAnalysis = null;
+      });
+
+    return this.currentAnalysis;
+  }
+
+  /**
+   * Internal method to perform analysis with retry logic
+   */
+  async _performAnalysis(imageUri, context) {
+    let imageUrl;
+
     try {
-      this.analyzing = true;
       this.frameNumber++;
 
       // Convert image to base64
@@ -38,62 +67,201 @@ class AIVisionService {
         encoding: 'base64',
       });
 
-      const imageUrl = `data:image/jpeg;base64,${base64Image}`;
+      imageUrl = `data:image/jpeg;base64,${base64Image}`;
 
-      // Call MCP backend (uses Gemini Flash for 3x speed!)
-      const response = await fetch(`${this.mcpUrl}/call-tool`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': this.supabaseKey,
-          'Authorization': `Bearer ${this.supabaseKey}`,
-        },
-        body: JSON.stringify({
-          name: 'analyze_live_inspection',
-          arguments: {
-            imageUrl,
-            sessionId: this.sessionId,
-            frameNumber: this.frameNumber,
-            timestamp: Date.now(),
-          },
-        }),
-      });
+      // Try MCP backend first with retry logic
+      return await this._retryWithBackoff(
+        () => this._analyzeWithMCP(imageUrl, context),
+        'MCP'
+      );
+    } catch (mcpError) {
+      console.error('❌ MCP analysis failed after retries:', mcpError);
 
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('❌ MCP API error:', error);
-        throw new Error(`MCP API failed: ${response.status}`);
+      // ===================================================================
+      // FIX: Fallback to OpenAI when MCP fails
+      // ===================================================================
+      if (imageUrl) {
+        try {
+          console.log('🔄 Falling back to OpenAI direct API...');
+          return await this._analyzeWithOpenAI(imageUrl, context);
+        } catch (openaiError) {
+          console.error('❌ OpenAI fallback failed:', openaiError);
+        }
       }
 
-      const data = await response.json();
-
-      // Parse MCP response
-      const mcpContent = data.content?.[0]?.text;
-      if (!mcpContent) {
-        throw new Error('Invalid MCP response format');
-      }
-
-      const analysisData = JSON.parse(mcpContent);
-
-      // Convert MCP format to app format
-      const analysis = this.convertMCPToAppFormat(analysisData, context);
-      this.lastAnalysis = analysis;
-
-      console.log('✅ AI Vision Analysis (Gemini Flash):', analysis);
-      return analysis;
-    } catch (error) {
-      console.error('❌ Failed to analyze frame:', error);
+      // Return graceful error response
       return {
-        error: error.message,
-        narration: 'Unable to analyze image. Please try again.',
+        error: 'Analysis service unavailable',
+        narration: 'Unable to analyze image. Please check your connection and try again.',
         issues: ['Analysis error'],
         category: 'Error',
         materials: [],
         compliance: 'Unable to check compliance',
+        timestamp: new Date().toISOString()
       };
-    } finally {
-      this.analyzing = false;
     }
+  }
+
+  /**
+   * Retry with exponential backoff
+   */
+  async _retryWithBackoff(fn, serviceName) {
+    let lastError;
+
+    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+
+        if (attempt < this.retryConfig.maxRetries) {
+          const delay = Math.min(
+            this.retryConfig.baseDelay * Math.pow(2, attempt),
+            this.retryConfig.maxDelay
+          );
+          console.log(`⚠️ ${serviceName} attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
+   * Analyze with MCP backend
+   */
+  async _analyzeWithMCP(imageUrl, context) {
+    const response = await fetch(`${this.mcpUrl}/call-tool`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': this.supabaseKey,
+        'Authorization': `Bearer ${this.supabaseKey}`,
+      },
+      body: JSON.stringify({
+        name: 'analyze_live_inspection',
+        arguments: {
+          imageUrl,
+          sessionId: this.sessionId,
+          frameNumber: this.frameNumber,
+          timestamp: Date.now(),
+        },
+      }),
+      // Timeout after 30 seconds
+      signal: AbortSignal.timeout(30000)
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ MCP API error:', error);
+      throw new Error(`MCP API failed: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+
+    // Parse MCP response
+    const mcpContent = data.content?.[0]?.text;
+    if (!mcpContent) {
+      throw new Error('Invalid MCP response format');
+    }
+
+    const analysisData = JSON.parse(mcpContent);
+
+    // Convert MCP format to app format
+    const analysis = this.convertMCPToAppFormat(analysisData, context);
+    this.lastAnalysis = analysis;
+
+    console.log('✅ AI Vision Analysis (Gemini Flash via MCP):', analysis);
+    return analysis;
+  }
+
+  /**
+   * Analyze with OpenAI direct (fallback)
+   */
+  async _analyzeWithOpenAI(imageUrl, context) {
+    if (!this.openaiKey) {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    const prompt = `You are analyzing a construction site in REAL-TIME. Be FAST and CONCISE.
+
+ANALYZE THIS IMAGE FOR:
+1. Building code violations (cite Honolulu codes: IRC 2018, IBC 2018, NEC 2020, IPC 2018)
+2. Safety hazards (OSHA violations)
+3. Structural defects
+4. Quality issues
+
+Return ONLY JSON in this exact format:
+{
+  "violations": [{
+    "id": "unique_id",
+    "code": "HBC 1808.3",
+    "issue": "Brief description",
+    "severity": "critical|high|medium|low",
+    "category": "structural|electrical|plumbing|safety|quality"
+  }],
+  "summary": "Quick summary",
+  "confidence": 0-100
+}
+
+If NO violations: return {"violations": [], "summary": "No violations detected", "confidence": 95}`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: prompt
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageUrl
+              }
+            }
+          ]
+        }],
+        max_tokens: 800,
+        temperature: 0.3
+      }),
+      // Timeout after 30 seconds
+      signal: AbortSignal.timeout(30000)
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenAI API failed: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+    const analysisText = data.choices?.[0]?.message?.content || '{"violations": []}';
+
+    let analysisData;
+    try {
+      analysisData = JSON.parse(analysisText);
+    } catch {
+      analysisData = {
+        violations: [],
+        summary: 'Analysis parsing error',
+        confidence: 0
+      };
+    }
+
+    // Convert to app format
+    const analysis = this.convertMCPToAppFormat(analysisData, context);
+    this.lastAnalysis = analysis;
+
+    console.log('✅ AI Vision Analysis (OpenAI Fallback):', analysis);
+    return analysis;
   }
 
   /**
@@ -343,7 +511,7 @@ class AIVisionService {
    * Check if currently analyzing
    */
   isAnalyzing() {
-    return this.analyzing;
+    return !!this.currentAnalysis;
   }
 
   /**
@@ -352,14 +520,14 @@ class AIVisionService {
   clearHistory() {
     this.lastAnalysis = null;
     this.frameNumber = 0;
-    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**
    * Reset session (start new inspection)
    */
   resetSession() {
-    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.sessionId = `mobile_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     this.frameNumber = 0;
     this.lastAnalysis = null;
   }

@@ -19,9 +19,9 @@ import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
-import * as ImageManipulator from 'expo-image-manipulator';
 import VoiceService from '../services/VoiceService';
-import { analyzeLiveInspection, health } from '../services/McpClient';
+import AIVisionService from '../services/AIVisionService';
+import { health } from '../services/McpClient';
 import getSupabaseClient from '../services/supabaseClient';
 
 const INSPECTION_TYPES = [
@@ -40,7 +40,9 @@ export default function LiveInspectionScreen({ route, navigation }) {
   const sessionIdRef = useRef(null);
   const analyzingRef = useRef(false); // Use ref to prevent stale closure
   const consecutiveErrorsRef = useRef(0); // Track consecutive errors for backoff
+  const isMountedRef = useRef(true); // Track if component is mounted to prevent state updates after unmount
 
+  // Get camera and location permissions (hooks must be called unconditionally)
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const [locationPerm, requestLocationPerm] = Location.useForegroundPermissions();
   const [isScanning, setIsScanning] = useState(false);
@@ -61,12 +63,19 @@ export default function LiveInspectionScreen({ route, navigation }) {
 
   // Cleanup camera when component unmounts
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false; // Mark as unmounted
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
         frameIntervalRef.current = null;
       }
       analyzingRef.current = false;
+      // Stop camera if still active
+      if (cameraRef.current) {
+        // Camera will be cleaned up by React Native, but we mark it
+        cameraRef.current = null;
+      }
     };
   }, []);
 
@@ -74,7 +83,13 @@ export default function LiveInspectionScreen({ route, navigation }) {
   useFocusEffect(
     React.useCallback(() => {
       return () => {
-        stopScanning();
+        // Stop scanning when leaving screen
+        if (frameIntervalRef.current) {
+          clearInterval(frameIntervalRef.current);
+          frameIntervalRef.current = null;
+        }
+        setIsScanning(false);
+        consecutiveErrorsRef.current = 0;
       };
     }, [])
   );
@@ -98,9 +113,18 @@ export default function LiveInspectionScreen({ route, navigation }) {
 
       // Create project in Supabase
       const supabase = getSupabaseClient();
-      const { data: user } = await supabase.auth.getUser();
-      if (user.user) {
-        const { data: project } = await supabase
+      const { data: user, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error('Failed to get user:', userError);
+        if (isMountedRef.current) {
+          setProjectAddress('Unknown Location (Auth Error)');
+        }
+        return;
+      }
+
+      if (user?.user?.id) {
+        const { data: project, error: projectError } = await supabase
           .from('projects')
           .insert({
             name: `Inspection - ${address}`,
@@ -113,10 +137,15 @@ export default function LiveInspectionScreen({ route, navigation }) {
           .select()
           .single();
 
-        if (project) {
+        if (projectError) {
+          console.error('Failed to create project:', projectError);
+        } else if (project && isMountedRef.current) {
           setProjectId(project.id);
           console.log('✅ Auto-created project:', project.id);
         }
+      } else if (isMountedRef.current) {
+        // Guest mode or no user
+        setProjectAddress(address);
       }
     } catch (error) {
       console.error('GPS project creation failed:', error);
@@ -141,73 +170,79 @@ export default function LiveInspectionScreen({ route, navigation }) {
 
       // Create inspection session
       const supabase = getSupabaseClient();
-      const { data: user } = await supabase.auth.getUser();
-    if (user.user && projectId) {
-      const { data: session } = await supabase
-        .from('inspection_sessions')
-        .insert({
-          project_id: projectId,
-          user_id: user.user.id,
-          inspection_type: inspectionType,
-          status: 'in_progress',
-          started_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      const { data: user, error: userError } = await supabase.auth.getUser();
+      
+      if (!userError && user?.user?.id && projectId) {
+        const { data: session, error: sessionError } = await supabase
+          .from('inspection_sessions')
+          .insert({
+            project_id: projectId,
+            user_id: user.user.id,
+            inspection_type: inspectionType,
+            status: 'in_progress',
+            started_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
 
-      sessionIdRef.current = session?.id;
-    }
+        if (sessionError) {
+          console.error('Failed to create session:', sessionError);
+        } else if (session?.id) {
+          sessionIdRef.current = session.id;
+        }
+      }
 
     setIsScanning(true);
     consecutiveErrorsRef.current = 0; // Reset error counter when starting new scan
 
     const captureAndAnalyze = async () => {
-      if (!cameraRef.current || analyzingRef.current) return;
+      if (!cameraRef.current || analyzingRef.current || !isMountedRef.current) return;
 
       try {
         analyzingRef.current = true;
-        setAnalyzing(true);
+        if (isMountedRef.current) {
+          setAnalyzing(true);
+        }
 
         // Capture frame with reduced quality to minimize memory usage
         const photo = await cameraRef.current.takePictureAsync({
-          base64: true,
-          quality: 0.4,
+          quality: 0.5,
           skipProcessing: true,
         });
 
-        // Resize for faster upload with lower compression
-        const resized = await ImageManipulator.manipulateAsync(
-          photo.uri,
-          [{ resize: { width: 960 } }],
-          { compress: 0.4, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-        );
-
-        // Call MCP REST endpoint
-        const result = await analyzeLiveInspection({
+        // Analyze with AIVisionService (has race condition fixes, OpenAI fallback, retry logic)
+        const result = await AIVisionService.analyzeFrame(photo.uri, {
           projectId: projectId || 'unknown',
           projectName: projectAddress || 'Unknown',
-          frame_b64: resized.base64,
           inspectionType,
+          sessionId: sessionIdRef.current,
         });
 
         // Reset error counter on success
         consecutiveErrorsRef.current = 0;
 
-        // Update overlays
-        if (result.overlays && result.overlays.length > 0) {
-          const newOverlays = result.overlays.slice(0, 3).map((overlay, idx) => ({
-            id: Date.now() + idx,
-            text: overlay.text || overlay.description || 'Violation',
-            severity: overlay.severity || 'major',
-            code: overlay.code_reference || 'Code Unknown',
-            x: typeof overlay.x === 'number' ? overlay.x : 0.1,
-            y: typeof overlay.y === 'number' ? overlay.y : 0.6 + idx * 0.1,
+        // Check if still mounted before updating state
+        if (!isMountedRef.current) return;
+
+        // Update overlays from AIVisionService violations
+        if (result.violations && result.violations.length > 0) {
+          const newOverlays = result.violations.slice(0, 3).map((violation, idx) => ({
+            id: violation.id || `${Date.now()}_${idx}`,
+            text: violation.issue || violation.text || 'Violation detected',
+            severity: violation.severity || 'medium',
+            code: violation.code || 'Code Unknown',
+            x: 0.1,
+            y: 0.6 + idx * 0.1,
           }));
 
           setOverlays(newOverlays);
-          setViolations(prev => [...prev, ...newOverlays]);
+          // Limit violations array to prevent memory leak (keep last 100)
+          setViolations(prev => {
+            const updated = [...prev, ...newOverlays];
+            return updated.slice(-100); // Keep only last 100 violations
+          });
 
-          // Speak first violation
+          // Speak narration from AIVisionService
           if (result.narration) {
             VoiceService.speak(result.narration);
           } else if (newOverlays[0]) {
@@ -217,21 +252,29 @@ export default function LiveInspectionScreen({ route, navigation }) {
           // Save violations to database
           saveViolations(newOverlays);
         } else {
-          setOverlays([]);
+          if (isMountedRef.current) {
+            setOverlays([]);
+          }
         }
 
         analyzingRef.current = false;
-        setAnalyzing(false);
+        if (isMountedRef.current) {
+          setAnalyzing(false);
+        }
       } catch (error) {
         console.error('Analysis error:', error);
         analyzingRef.current = false;
-        setAnalyzing(false);
+        
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setAnalyzing(false);
+        }
 
         // Increment error counter
         consecutiveErrorsRef.current += 1;
 
         // If too many consecutive errors, stop scanning and alert user
-        if (consecutiveErrorsRef.current >= 5) {
+        if (consecutiveErrorsRef.current >= 5 && isMountedRef.current) {
           stopScanning();
           Alert.alert(
             'Connection Lost',
@@ -293,35 +336,57 @@ export default function LiveInspectionScreen({ route, navigation }) {
   };
 
   const saveViolations = async (newViolations) => {
-    if (!sessionIdRef.current) return;
+    if (!sessionIdRef.current || !isMountedRef.current) return;
 
-    const supabase = getSupabaseClient();
-    const { data: user } = await supabase.auth.getUser();
-    if (!user.user) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { data: user, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user?.user?.id) {
+        console.warn('Cannot save violations: user not authenticated');
+        return;
+      }
 
-    const records = newViolations.map(v => ({
-      session_id: sessionIdRef.current,
-      project_id: projectId,
-      user_id: user.user.id,
-      violation_description: v.text,
-      code_reference: v.code,
-      severity: v.severity,
-      created_at: new Date().toISOString(),
-    }));
+      const records = newViolations.map(v => ({
+        session_id: sessionIdRef.current,
+        project_id: projectId,
+        user_id: user.user.id,
+        violation_description: v.text,
+        code_reference: v.code,
+        severity: v.severity,
+        created_at: new Date().toISOString(),
+      }));
 
-    await supabase.from('inspection_violations').insert(records);
+      const { error: insertError } = await supabase.from('inspection_violations').insert(records);
+      
+      if (insertError) {
+        console.error('Failed to save violations:', insertError);
+      }
+    } catch (error) {
+      console.error('Error saving violations:', error);
+      // Don't throw - this is non-critical
+    }
   };
 
   const captureViolation = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || !isMountedRef.current) return;
+    
+    // Check permission before capturing
+    if (!permission?.granted) {
+      Alert.alert('Permission Required', 'Camera permission is required to capture violations.');
+      return;
+    }
 
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
 
+      if (!isMountedRef.current) return; // Check again after async operation
+
       const supabase = getSupabaseClient();
-      const { data: user } = await supabase.auth.getUser();
-      if (user.user && projectId) {
-        await supabase.from('captured_violations').insert({
+      const { data: user, error: userError } = await supabase.auth.getUser();
+      
+      if (!userError && user?.user?.id && projectId) {
+        const { error: insertError } = await supabase.from('captured_violations').insert({
           project_id: projectId,
           session_id: sessionIdRef.current,
           user_id: user.user.id,
@@ -331,11 +396,21 @@ export default function LiveInspectionScreen({ route, navigation }) {
           created_at: new Date().toISOString(),
         });
 
-        VoiceService.speak('Violation captured');
-        Alert.alert('✓ Captured', 'Violation photo saved');
+        if (insertError) {
+          console.error('Failed to save violation photo:', insertError);
+          Alert.alert('Error', 'Failed to save violation photo. Please try again.');
+        } else if (isMountedRef.current) {
+          VoiceService.speak('Violation captured').catch(err => console.error('Speech error:', err));
+          Alert.alert('✓ Captured', 'Violation photo saved');
+        }
+      } else if (isMountedRef.current) {
+        Alert.alert('Error', 'Cannot save violation. Please ensure you are logged in.');
       }
     } catch (error) {
       console.error('Capture error:', error);
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to capture photo. Please try again.');
+      }
     }
   };
 
@@ -364,8 +439,17 @@ export default function LiveInspectionScreen({ route, navigation }) {
   const selectInspectionType = (type) => {
     setInspectionType(type);
     setShowTypePicker(false);
-    if (!locationPerm?.granted) {
-      requestLocationPerm();
+    // Request location permission if not granted
+    if (!locationPerm?.granted && requestLocationPerm) {
+      requestLocationPerm().catch(err => {
+        console.error('Failed to request location permission:', err);
+      });
+    }
+    // Request camera permission if not granted
+    if (!permission?.granted && requestPermission) {
+      requestPermission().catch(err => {
+        console.error('Failed to request camera permission:', err);
+      });
     }
   };
 
@@ -382,10 +466,12 @@ export default function LiveInspectionScreen({ route, navigation }) {
     }
   };
 
+  // Check camera permissions before rendering
   if (!permission) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color="#0066CC" />
+        <Text style={styles.loadingText}>Checking permissions...</Text>
       </View>
     );
   }
@@ -393,10 +479,26 @@ export default function LiveInspectionScreen({ route, navigation }) {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.permissionText}>Camera permission required</Text>
-        <TouchableOpacity style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>Grant Permission</Text>
-        </TouchableOpacity>
+        <View style={styles.permissionContainer}>
+          <MaterialIcons name="camera-alt" size={64} color="#CCCCCC" />
+          <Text style={styles.permissionText}>Camera permission is required</Text>
+          <Text style={styles.permissionSubtext}>
+            Please grant camera permission to use live AI inspection
+          </Text>
+          <TouchableOpacity 
+            style={styles.permissionButton} 
+            onPress={() => {
+              if (requestPermission) {
+                requestPermission().catch(err => {
+                  console.error('Permission request failed:', err);
+                  Alert.alert('Permission Error', 'Failed to request camera permission. Please enable it in device settings.');
+                });
+              }
+            }}
+          >
+            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -539,11 +641,38 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  permissionContainer: {
+    alignItems: 'center',
+    padding: 24,
+  },
   permissionText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 18,
     textAlign: 'center',
     marginVertical: 20,
+    fontWeight: '600',
+  },
+  permissionSubtext: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  permissionButton: {
+    backgroundColor: '#0066CC',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 8,
+  },
+  permissionButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingText: {
+    color: 'white',
+    fontSize: 16,
+    marginTop: 16,
   },
   button: {
     backgroundColor: '#3B82F6',

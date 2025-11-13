@@ -1,10 +1,10 @@
-# VIS Eyesight
+# VISION
 
 AI-powered visual inspection platform for construction - "Build Right As You Go"
 
 ## Overview
 
-VIS Eyesight is a mobile app that provides real-time AI vision inspection for construction jobsites. Using GPT-4 Vision and voice control, it enables hands-free operation perfect for inspectors wearing Snap Spectacles or using mobile devices.
+VISION is a mobile app that provides real-time AI vision inspection for construction jobsites. Using GPT-4 Vision and voice control, it enables hands-free operation perfect for inspectors wearing Snap Spectacles or using mobile devices.
 
 ## Three-Phase Workflow
 

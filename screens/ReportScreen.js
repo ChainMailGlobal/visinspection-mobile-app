@@ -1,21 +1,121 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share, ActivityIndicator } from 'react-native';
 import { Button } from 'react-native-paper';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import getSupabaseClient from '../services/supabaseClient';
 
 export default function ReportScreen({ route, navigation }) {
   const [generating, setGenerating] = useState(false);
   const [reportUri, setReportUri] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [reportData, setReportData] = useState(null);
 
+  const { projectId, sessionId, violations: routeViolations } = route?.params || {};
   const inspectionData = route?.params || {};
   const { photos = [], defects = [], location, jurisdiction, duration } = inspectionData;
+
+  // Fetch report data from database if projectId/sessionId provided
+  useEffect(() => {
+    if (projectId && sessionId) {
+      fetchReportData();
+    } else if (routeViolations && routeViolations.length > 0) {
+      // Use route params if available
+      setReportData({
+        violations: routeViolations,
+        photos: photos || [],
+        defects: defects || routeViolations,
+      });
+    }
+  }, [projectId, sessionId]);
+
+  const fetchReportData = async () => {
+    setLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      
+      // Fetch session
+      const { data: session } = await supabase
+        .from('inspection_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single();
+
+      // Fetch violations
+      const { data: violations } = await supabase
+        .from('inspection_violations')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false });
+
+      // Fetch captured violations (photos)
+      const { data: capturedViolations } = await supabase
+        .from('captured_violations')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false });
+
+      // Fetch project for location
+      const { data: project } = projectId ? await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single() : { data: null };
+
+      setReportData({
+        session,
+        violations: violations || [],
+        capturedViolations: capturedViolations || [],
+        project,
+        photos: capturedViolations?.map(cv => cv.photo_url) || [],
+        defects: violations?.map(v => ({
+          category: v.severity,
+          severity: v.severity,
+          issues: [v.violation_description],
+          code: v.code_reference,
+          timestamp: v.created_at,
+        })) || [],
+        location: project ? {
+          latitude: project.latitude,
+          longitude: project.longitude,
+        } : null,
+        jurisdiction: 'Honolulu Building Code',
+        duration: session ? 
+          (new Date(session.ended_at || Date.now()) - new Date(session.started_at)) : 
+          null,
+      });
+    } catch (error) {
+      console.error('Failed to fetch report data:', error);
+      // Fall back to route params
+      setReportData({
+        violations: routeViolations || [],
+        photos: photos || [],
+        defects: defects || routeViolations || [],
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const generatePDFReport = async () => {
     setGenerating(true);
     try {
+      // Use fetched data or fall back to route params
+      const data = reportData || {
+        photos: photos || [],
+        defects: defects || routeViolations || [],
+        location,
+        jurisdiction: jurisdiction || 'Honolulu Building Code',
+        duration,
+      };
+
+      const finalPhotos = data.photos || photos || [];
+      const finalDefects = data.defects || defects || routeViolations || [];
+      const finalLocation = data.location || location;
+      const finalJurisdiction = data.jurisdiction || jurisdiction || 'Honolulu Building Code';
+      const finalDuration = data.duration || duration;
       const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -131,28 +231,28 @@ export default function ReportScreen({ route, navigation }) {
       <div class="info-value">${new Date().toLocaleString()}</div>
 
       <div class="info-label">Jurisdiction:</div>
-      <div class="info-value">${jurisdiction || 'Honolulu Building Code'}</div>
+      <div class="info-value">${finalJurisdiction}</div>
 
-      ${location ? `
+      ${finalLocation ? `
       <div class="info-label">Location:</div>
-      <div class="info-value">Lat: ${location.latitude?.toFixed(6)}, Lng: ${location.longitude?.toFixed(6)}</div>
+      <div class="info-value">${finalLocation.latitude ? `Lat: ${finalLocation.latitude.toFixed(6)}, Lng: ${finalLocation.longitude.toFixed(6)}` : finalLocation.address || 'N/A'}</div>
       ` : ''}
 
       <div class="info-label">Duration:</div>
-      <div class="info-value">${duration ? Math.floor(duration / 60000) + ' minutes' : 'N/A'}</div>
+      <div class="info-value">${finalDuration ? Math.floor(finalDuration / 60000) + ' minutes' : 'N/A'}</div>
 
       <div class="info-label">Photos Captured:</div>
-      <div class="info-value">${photos.length}</div>
+      <div class="info-value">${finalPhotos.length}</div>
 
       <div class="info-label">Defects Marked:</div>
-      <div class="info-value">${defects.length}</div>
+      <div class="info-value">${finalDefects.length}</div>
     </div>
   </div>
 
-  ${defects.length > 0 ? `
+  ${finalDefects.length > 0 ? `
   <div class="section">
-    <div class="section-title">Defects & Issues Found (${defects.length})</div>
-    ${defects.map((defect, index) => `
+    <div class="section-title">Defects & Issues Found (${finalDefects.length})</div>
+    ${finalDefects.map((defect, index) => `
       <div class="defect-card">
         <div class="defect-title">Defect ${index + 1}: ${defect.category || 'General'}</div>
         <div class="defect-category">Severity: ${(defect.severity || 'yellow').toUpperCase()}</div>
@@ -188,10 +288,10 @@ export default function ReportScreen({ route, navigation }) {
 
   <div class="section">
     <div class="section-title">Code Compliance Summary</div>
-    <p>This inspection was performed against <strong>${jurisdiction || 'Honolulu Building Code'}</strong> requirements.</p>
-    <p>${defects.length === 0
+    <p>This inspection was performed against <strong>${finalJurisdiction}</strong> requirements.</p>
+    <p>${finalDefects.length === 0
       ? 'All inspected areas appear to comply with building code requirements.'
-      : `${defects.length} potential issue${defects.length > 1 ? 's' : ''} identified that may require attention.`
+      : `${finalDefects.length} potential issue${finalDefects.length > 1 ? 's' : ''} identified that may require attention.`
     }</p>
   </div>
 
@@ -278,6 +378,24 @@ export default function ReportScreen({ route, navigation }) {
     );
   };
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#0066CC" />
+          <Text style={styles.loadingText}>Loading report data...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const displayData = reportData || {
+    photos: photos || [],
+    defects: defects || routeViolations || [],
+    location,
+    jurisdiction: jurisdiction || 'Honolulu Building Code',
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -288,9 +406,9 @@ export default function ReportScreen({ route, navigation }) {
       <View style={styles.section}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Inspection Summary</Text>
-          <Text style={styles.summaryText}>Photos: {photos.length}</Text>
-          <Text style={styles.summaryText}>Defects: {defects.length}</Text>
-          <Text style={styles.summaryText}>Jurisdiction: {jurisdiction || 'Honolulu'}</Text>
+          <Text style={styles.summaryText}>Photos: {displayData.photos?.length || 0}</Text>
+          <Text style={styles.summaryText}>Defects: {displayData.defects?.length || 0}</Text>
+          <Text style={styles.summaryText}>Jurisdiction: {displayData.jurisdiction || 'Honolulu'}</Text>
         </View>
 
         <TouchableOpacity
@@ -341,6 +459,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
   },
   header: {
     padding: 24,
