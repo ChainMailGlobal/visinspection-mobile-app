@@ -28,20 +28,38 @@ const theme = {
   },
 };
 
+const APP_VERSION = '1.0.0'; // Update this when you want to force onboarding
+
 export default function App() {
   const [initialRoute, setInitialRoute] = useState(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem('hasSeenOnboarding')
-      .then(seen => {
-        setInitialRoute(seen === 'true' ? 'Home' : 'Onboarding');
-        setIsReady(true);
-      })
-      .catch(() => {
+    const checkOnboarding = async () => {
+      try {
+        const [hasSeenOnboarding, lastVersion] = await Promise.all([
+          AsyncStorage.getItem('hasSeenOnboarding'),
+          AsyncStorage.getItem('appVersion')
+        ]);
+
+        // Force onboarding if version changed or first install
+        if (lastVersion !== APP_VERSION) {
+          await AsyncStorage.setItem('appVersion', APP_VERSION);
+          setInitialRoute('Onboarding');
+        } else if (hasSeenOnboarding === 'true') {
+          setInitialRoute('Home');
+        } else {
+          setInitialRoute('Onboarding');
+        }
+      } catch (error) {
+        console.error('Error checking onboarding:', error);
         setInitialRoute('Onboarding');
+      } finally {
         setIsReady(true);
-      });
+      }
+    };
+
+    checkOnboarding();
   }, []);
 
   if (!isReady) {
