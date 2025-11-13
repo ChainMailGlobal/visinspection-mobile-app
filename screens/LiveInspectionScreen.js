@@ -24,8 +24,6 @@ import VoiceService from '../services/VoiceService';
 import { analyzeLiveInspection, health } from '../services/McpClient';
 import getSupabaseClient from '../services/supabaseClient';
 
-const supabase = getSupabaseClient();
-
 const INSPECTION_TYPES = [
   { id: 'building', label: 'Building/Structural', icon: 'business' },
   { id: 'electrical', label: 'Electrical', icon: 'bolt' },
@@ -99,6 +97,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
       setProjectAddress(address);
 
       // Create project in Supabase
+      const supabase = getSupabaseClient();
       const { data: user } = await supabase.auth.getUser();
       if (user.user) {
         const { data: project } = await supabase
@@ -140,6 +139,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
     }
 
     // Create inspection session
+    const supabase = getSupabaseClient();
     const { data: user } = await supabase.auth.getUser();
     if (user.user && projectId) {
       const { data: session } = await supabase
@@ -285,6 +285,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
   const saveViolations = async (newViolations) => {
     if (!sessionIdRef.current) return;
 
+    const supabase = getSupabaseClient();
     const { data: user } = await supabase.auth.getUser();
     if (!user.user) return;
 
@@ -307,6 +308,7 @@ export default function LiveInspectionScreen({ route, navigation }) {
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
 
+      const supabase = getSupabaseClient();
       const { data: user } = await supabase.auth.getUser();
       if (user.user && projectId) {
         await supabase.from('captured_violations').insert({

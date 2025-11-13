@@ -1,7 +1,5 @@
 import getSupabaseClient from './supabaseClient';
 
-const supabase = getSupabaseClient();
-
 /**
  * Run Honolulu DPP Pre-Check with actual code citations and page numbers
  * @param {object} params - { jurisdiction, projectType, pkg }
@@ -10,6 +8,8 @@ const supabase = getSupabaseClient();
 export async function runDppPrecheck({ jurisdiction = 'honolulu', projectType = 'residential', imageUrl }) {
   try {
     console.log('📋 Running DPP Pre-Check...', { jurisdiction, projectType });
+
+    const supabase = getSupabaseClient();
 
     // Check if supabase.functions exists
     if (!supabase.functions || typeof supabase.functions.invoke !== 'function') {
