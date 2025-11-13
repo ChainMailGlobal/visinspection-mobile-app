@@ -38,7 +38,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vision.app",
+      "bundleIdentifier": "com.visinc.eyesight",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -51,7 +51,7 @@
       }
     },
     "android": {
-      "package": "com.vision.app",
+      "package": "com.visinc.eyesight",
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
