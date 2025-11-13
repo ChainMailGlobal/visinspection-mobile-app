@@ -127,20 +127,21 @@ export default function LiveInspectionScreen({ route, navigation }) {
   const startScanning = async () => {
     if (isScanning) return;
 
-    // Check MCP backend health before starting
-    const healthStatus = await health();
-    if (healthStatus !== 200) {
-      Alert.alert(
-        'Connection Error',
-        'Cannot connect to AI inspection service. Please check your internet connection and try again.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
+    try {
+      // Check MCP backend health before starting
+      const healthStatus = await health();
+      if (healthStatus !== 200) {
+        Alert.alert(
+          'Connection Error',
+          'Cannot connect to AI inspection service. Please check your internet connection and try again.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
 
-    // Create inspection session
-    const supabase = getSupabaseClient();
-    const { data: user } = await supabase.auth.getUser();
+      // Create inspection session
+      const supabase = getSupabaseClient();
+      const { data: user } = await supabase.auth.getUser();
     if (user.user && projectId) {
       const { data: session } = await supabase
         .from('inspection_sessions')
@@ -261,6 +262,14 @@ export default function LiveInspectionScreen({ route, navigation }) {
         console.error('Initial frame analysis failed:', error);
       }
     })();
+    } catch (error) {
+      console.error('❌ Start scanning failed:', error);
+      Alert.alert(
+        'Failed to Start',
+        error.message || 'Could not start AI inspection. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const stopScanning = () => {
