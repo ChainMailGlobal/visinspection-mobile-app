@@ -69,7 +69,7 @@ export default function OnboardingScreen({ navigation }) {
     try {
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
       await AsyncStorage.setItem('authMode', 'guest');
-      Speech.speak('Welcome to VIS Eyesight. Build right as you go with AR-powered jobsite verification.');
+      Speech.speak('Welcome to VISION. Build right as you go with AR-powered jobsite verification.');
       navigation.replace('Home');
     } catch (error) {
       console.error('Failed to save onboarding state:', error);
@@ -128,7 +128,7 @@ export default function OnboardingScreen({ navigation }) {
               >
                 <Text style={styles.authTitle}>Start Beta Testing</Text>
                 <Text style={styles.authDescription}>
-                  Begin using VIS Eyesight immediately{'\n'}
+                  Begin using VISION immediately{'\n'}
                   No account required
                 </Text>
                 <View style={styles.recommendedBadge}>

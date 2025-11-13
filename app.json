@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "VIS Eyesight",
-    "slug": "vis-eyesight",
+    "name": "VISION",
+    "slug": "vision",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -16,42 +16,42 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "VIS Eyesight needs camera access to capture inspection photos and AR overlays with Spectacles.",
-          "microphonePermission": "VIS Eyesight needs microphone access for voice-controlled defect marking.",
+          "cameraPermission": "VISION needs camera access to capture inspection photos and AR overlays.",
+          "microphonePermission": "VISION needs microphone access for voice-controlled defect marking.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow VIS Eyesight to use your location to tag inspection addresses."
+          "locationAlwaysAndWhenInUsePermission": "Allow VISION to use your location to tag inspection addresses."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "VIS Eyesight needs photo library access to save inspection documentation.",
-          "cameraPermission": "VIS Eyesight needs camera access to capture inspection photos."
+          "photosPermission": "VISION needs photo library access to save inspection documentation.",
+          "cameraPermission": "VISION needs camera access to capture inspection photos."
         }
       ],
       "expo-font"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.visinc.eyesight",
+      "bundleIdentifier": "com.vision.app",
       "config": {
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSCameraUsageDescription": "VIS Eyesight needs camera access to capture inspection photos and AR overlays with Spectacles.",
-        "NSMicrophoneUsageDescription": "VIS Eyesight needs microphone access for voice-controlled defect marking.",
-        "NSPhotoLibraryUsageDescription": "VIS Eyesight needs photo library access to save inspection documentation.",
-        "NSLocationWhenInUseUsageDescription": "VIS Eyesight needs location access to tag jobsite projects with GPS coordinates.",
-        "NSSpeechRecognitionUsageDescription": "VIS Eyesight uses speech recognition for hands-free voice commands on jobsites."
+        "NSCameraUsageDescription": "VISION needs camera access to capture inspection photos and AR overlays.",
+        "NSMicrophoneUsageDescription": "VISION needs microphone access for voice-controlled defect marking.",
+        "NSPhotoLibraryUsageDescription": "VISION needs photo library access to save inspection documentation.",
+        "NSLocationWhenInUseUsageDescription": "VISION needs location access to tag jobsite projects with GPS coordinates.",
+        "NSSpeechRecognitionUsageDescription": "VISION uses speech recognition for hands-free voice commands on jobsites."
       }
     },
     "android": {
-      "package": "com.visinc.eyesight",
+      "package": "com.vision.app",
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",

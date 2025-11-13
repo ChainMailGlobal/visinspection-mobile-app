@@ -120,7 +120,7 @@ export default function ReportScreen({ route, navigation }) {
 </head>
 <body>
   <div class="header">
-    <div class="title">VIS Eyesight Inspection Report</div>
+    <div class="title">VISION Inspection Report</div>
     <div class="subtitle">Build Right As You Go - AI-Powered Visual Inspection</div>
   </div>
 
@@ -196,7 +196,7 @@ export default function ReportScreen({ route, navigation }) {
   </div>
 
   <div class="footer">
-    Generated with <strong>VIS Eyesight</strong> - AI-Powered Visual Inspection Platform<br/>
+    Generated with <strong>VISION</strong> - AI-Powered Visual Inspection Platform<br/>
     One prevented rework pays for the platform<br/>
     <em>This report is for informational purposes. Final compliance determination by licensed inspector.</em>
   </div>
