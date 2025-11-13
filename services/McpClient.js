@@ -74,6 +74,18 @@ export async function analyzeLiveInspection({ projectId, projectName, frame_b64,
 }
 
 export async function health() {
-  const url = `${process.env.EXPO_PUBLIC_MCP_URL}/health`;
-  try { const r = await fetch(url); return r.status; } catch { return 0; }
+  // Use sanitized MCP_URL constant instead of raw env var
+  if (!BASE || !config.mcp) {
+    console.warn('[McpClient] Cannot check health - invalid MCP_URL:', BASE);
+    return 0;
+  }
+
+  const url = `${BASE}/health`;
+  try {
+    const r = await fetch(url);
+    return r.status;
+  } catch (error) {
+    console.error('[McpClient] Health check failed:', error.message);
+    return 0;
+  }
 }
