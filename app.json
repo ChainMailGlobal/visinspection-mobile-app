@@ -26,14 +26,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.visinc.vision",
+      "bundleIdentifier": "com.visinc.eyesight",
       "infoPlist": {
         "NSCameraUsageDescription": "VISION needs camera access to capture inspection photos and AR overlays.",
         "NSLocationWhenInUseUsageDescription": "VISION needs location access to tag jobsite projects with GPS coordinates."
       }
     },
     "android": {
-      "package": "com.visinc.vision",
+      "package": "com.visinc.eyesight",
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
