@@ -6,6 +6,7 @@
 import { MCP_URL, SUPABASE_URL, SUPABASE_ANON_KEY, OPENAI_API_KEY, isConfigValid } from '../config/env';
 import getSupabaseClient from './supabaseClient';
 import { health } from './McpClient';
+import ErrorStore from './ErrorStore';
 
 class DiagnosticsService {
   constructor() {
@@ -27,6 +28,8 @@ class DiagnosticsService {
       { name: 'Camera Permissions', fn: this.checkCameraPermissions.bind(this) },
       { name: 'Location Permissions', fn: this.checkLocationPermissions.bind(this) },
       { name: 'Network Connectivity', fn: this.checkNetworkConnectivity.bind(this) },
+      { name: 'Runtime Errors', fn: this.checkRuntimeErrors.bind(this) },
+      { name: 'Camera Component Test', fn: this.checkCameraComponent.bind(this) },
     ];
 
     for (const diagnostic of diagnostics) {
@@ -469,6 +472,118 @@ class DiagnosticsService {
   }
 
   /**
+   * Check for runtime errors from ErrorBoundary
+   */
+  async checkRuntimeErrors() {
+    try {
+      const errors = ErrorStore.getErrors();
+      const latestError = ErrorStore.getLatestError();
+
+      if (errors.length === 0) {
+        return {
+          status: 'pass',
+          message: 'No runtime errors detected',
+          details: { errorCount: 0 },
+        };
+      }
+
+      return {
+        status: 'fail',
+        message: `Found ${errors.length} runtime error(s) - Latest: ${latestError?.message || 'Unknown'}`,
+        details: {
+          errorCount: errors.length,
+          latestError: latestError ? {
+            message: latestError.message,
+            type: latestError.type || 'React Error',
+            timestamp: latestError.timestamp,
+            componentStack: latestError.componentStack ? latestError.componentStack.substring(0, 200) + '...' : 'No component stack',
+          } : null,
+          allErrors: errors.map(e => ({
+            message: e.message,
+            timestamp: e.timestamp,
+          })),
+        },
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        message: `Error check failed: ${error.message}`,
+        details: { error: error.toString() },
+      };
+    }
+  }
+
+  /**
+   * Test if Camera component can be imported and used
+   */
+  async checkCameraComponent() {
+    try {
+      // Try to import Camera
+      const { Camera } = require('expo-camera');
+      
+      if (!Camera) {
+        return {
+          status: 'fail',
+          message: 'Camera component not available from expo-camera',
+          details: { issue: 'Import failed' },
+        };
+      }
+
+      // Check if Camera has required methods
+      const hasGetPermissions = typeof Camera.getCameraPermissionsAsync === 'function';
+      const hasRequestPermissions = typeof Camera.requestCameraPermissionsAsync === 'function';
+      const hasUsePermissions = typeof Camera.useCameraPermissions === 'function';
+
+      // Try to get permissions (this will tell us if module is initialized)
+      let permissionCheck;
+      try {
+        permissionCheck = await Camera.getCameraPermissionsAsync();
+      } catch (permError) {
+        return {
+          status: 'fail',
+          message: `Camera module not initialized: ${permError.message}`,
+          details: {
+            error: permError.message,
+            hasGetPermissions,
+            hasRequestPermissions,
+            hasUsePermissions,
+          },
+        };
+      }
+
+      // Check if Camera component can be referenced (not actually rendered)
+      const cameraProps = ['facing', 'onCameraReady', 'onMountError', 'style'];
+      const hasProps = cameraProps.every(prop => Camera.propTypes || true); // Can't check propTypes in runtime easily
+
+      return {
+        status: 'pass',
+        message: 'Camera component is available and initialized',
+        details: {
+          moduleLoaded: true,
+          hasGetPermissions,
+          hasRequestPermissions,
+          hasUsePermissions,
+          permissionStatus: permissionCheck?.status || 'unknown',
+          note: 'Camera component exists but actual render test requires device',
+        },
+      };
+    } catch (error) {
+      // Store the error
+      ErrorStore.recordCameraError(error, { stage: 'diagnostics_check' });
+
+      return {
+        status: 'fail',
+        message: `Camera component check failed: ${error.message}`,
+        details: {
+          error: error.message,
+          stack: error.stack ? error.stack.substring(0, 300) + '...' : 'No stack',
+          issue: 'Camera module may not be properly linked or initialized',
+        },
+      };
+    }
+  }
+
+  /**
    * Get formatted report (with error handling)
    */
   getFormattedReport() {
@@ -547,6 +662,8 @@ class DiagnosticsService {
           const hasMCPIssues = this.results.some(r => r && r.name && r.name.includes('MCP') && r.status === 'fail');
           const hasAuthIssues = this.results.some(r => r && r.name && r.name.includes('Authentication') && r.status === 'fail');
           const hasTableIssues = this.results.some(r => r && r.name === 'Database Tables' && r.status === 'fail');
+          const hasRuntimeErrors = this.results.some(r => r && r.name === 'Runtime Errors' && r.status === 'fail');
+          const hasCameraIssues = this.results.some(r => r && r.name === 'Camera Component Test' && r.status === 'fail');
           
           if (hasEnvIssues) {
             report += `1. ENVIRONMENT VARIABLES:\n`;
@@ -567,6 +684,29 @@ class DiagnosticsService {
             report += `3. DATABASE TABLES:\n`;
             report += `   • Run migrations in Supabase dashboard\n`;
             report += `   • Required tables: projects, inspection_sessions, inspection_violations, captured_violations\n\n`;
+          }
+          
+          if (hasRuntimeErrors) {
+            const runtimeErrorResult = this.results.find(r => r && r.name === 'Runtime Errors');
+            const latestError = runtimeErrorResult?.details?.latestError;
+            report += `4. RUNTIME ERRORS:\n`;
+            report += `   • The app crashed with: ${latestError?.message || 'Unknown error'}\n`;
+            if (latestError?.componentStack) {
+              report += `   • Component: ${latestError.componentStack.split('\n')[1]?.trim() || 'Unknown'}\n`;
+            }
+            report += `   • Check ErrorBoundary for full error details\n`;
+            report += `   • This is likely the cause of "Something Went Wrong" screen\n\n`;
+          }
+          
+          if (hasCameraIssues) {
+            const cameraResult = this.results.find(r => r && r.name === 'Camera Component Test');
+            report += `5. CAMERA COMPONENT:\n`;
+            report += `   • Issue: ${cameraResult?.message || 'Camera component not working'}\n`;
+            if (cameraResult?.details?.error) {
+              report += `   • Error: ${cameraResult.details.error}\n`;
+            }
+            report += `   • This is likely why Live AI mode crashes\n`;
+            report += `   • May need to rebuild app or check expo-camera installation\n\n`;
           }
         } catch (fixError) {
           report += `[Error generating fix suggestions]\n\n`;

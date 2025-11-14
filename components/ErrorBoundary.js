@@ -1,5 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+} from "react-native";
+import ErrorStore from "../services/ErrorStore";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -12,7 +19,21 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    console.error("========================================");
+    console.error("🚨 ERRORBOUNDARY CAUGHT ERROR 🚨");
+    console.error("Error:", error);
+    console.error("Error Message:", error?.message);
+    console.error("Error Stack:", error?.stack);
+    console.error("Component Stack:", errorInfo?.componentStack);
+    console.error("========================================");
+
+    // Store error for diagnostics
+    try {
+      ErrorStore.recordError(error, errorInfo);
+    } catch (storeError) {
+      console.error("Failed to store error:", storeError);
+    }
+
     this.setState({
       error,
       errorInfo,
@@ -30,9 +51,10 @@ class ErrorBoundary extends React.Component {
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <Text style={styles.title}>⚠️ Something Went Wrong</Text>
             <Text style={styles.message}>
-              The app encountered an unexpected error. Don't worry, your data is safe.
+              The app encountered an unexpected error. Don't worry, your data is
+              safe.
             </Text>
-            
+
             {__DEV__ && this.state.error && (
               <View style={styles.errorBox}>
                 <Text style={styles.errorTitle}>Error Details (Dev Only):</Text>
@@ -54,13 +76,8 @@ class ErrorBoundary extends React.Component {
             <TouchableOpacity
               style={[styles.button, styles.buttonSecondary]}
               onPress={() => {
-                // Navigate to home screen using navigation ref
                 if (this.props.navigationRef?.current) {
-                  this.props.navigationRef.current.navigate('Home');
-                } else if (this.props.navigation) {
-                  this.props.navigation.navigate('Home');
-                } else if (this.props.onNavigateHome) {
-                  this.props.onNavigateHome();
+                  this.props.navigationRef.current.navigate("Home");
                 }
                 this.handleReset();
               }}
@@ -79,57 +96,57 @@ class ErrorBoundary extends React.Component {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 24,
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontWeight: "700",
+    color: "#1A1A1A",
     marginBottom: 12,
-    textAlign: 'center',
+    textAlign: "center",
   },
   message: {
     fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
+    color: "#666666",
+    textAlign: "center",
     marginBottom: 32,
     lineHeight: 24,
   },
   errorBox: {
-    backgroundColor: '#FFF5F5',
+    backgroundColor: "#FFF5F5",
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: "#FCA5A5",
     borderRadius: 8,
     padding: 16,
     marginBottom: 24,
-    width: '100%',
+    width: "100%",
     maxHeight: 300,
   },
   errorTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#DC2626',
+    fontWeight: "600",
+    color: "#DC2626",
     marginBottom: 8,
   },
   errorText: {
     fontSize: 12,
-    color: '#991B1B',
-    fontFamily: 'monospace',
+    color: "#991B1B",
+    fontFamily: "monospace",
     marginBottom: 8,
   },
   errorStack: {
     fontSize: 10,
-    color: '#991B1B',
-    fontFamily: 'monospace',
+    color: "#991B1B",
+    fontFamily: "monospace",
   },
   button: {
-    backgroundColor: '#0066CC',
+    backgroundColor: "#0066CC",
     borderRadius: 8,
     paddingHorizontal: 32,
     paddingVertical: 16,
@@ -137,25 +154,22 @@ const styles = StyleSheet.create({
     minWidth: 200,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
   },
   buttonSecondary: {
-    backgroundColor: '#F8F8F8',
+    backgroundColor: "#F8F8F8",
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: "#E5E5E5",
   },
   buttonTextSecondary: {
-    color: '#1A1A1A',
+    color: "#1A1A1A",
     fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
   },
 });
 
 export default ErrorBoundary;
-
-
-

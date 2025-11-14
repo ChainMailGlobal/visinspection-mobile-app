@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "VISION",
-    "slug": "vis-eyesight",
+    "slug": "vision-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -9,16 +9,12 @@
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "plugins": [
       [
         "expo-camera",
         {
-          "cameraPermission": "VISION needs camera access to capture inspection photos and AR overlays.",
-          "microphonePermission": "VISION needs microphone access for voice-controlled defect marking.",
-          "recordAudioAndroid": true
+          "cameraPermission": "VISION needs camera access to capture inspection photos and AR overlays."
         }
       ],
       [
@@ -26,38 +22,27 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow VISION to use your location to tag inspection addresses."
         }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "VISION needs photo library access to save inspection documentation.",
-          "cameraPermission": "VISION needs camera access to capture inspection photos."
-        }
-      ],
-      "expo-font"
+      ]
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.visinc.eyesight",
-      "config": {
-        "usesNonExemptEncryption": false
-      },
+      "bundleIdentifier": "com.visinc.vision",
       "infoPlist": {
         "NSCameraUsageDescription": "VISION needs camera access to capture inspection photos and AR overlays.",
-        "NSMicrophoneUsageDescription": "VISION needs microphone access for voice-controlled defect marking.",
-        "NSPhotoLibraryUsageDescription": "VISION needs photo library access to save inspection documentation.",
-        "NSLocationWhenInUseUsageDescription": "VISION needs location access to tag jobsite projects with GPS coordinates.",
-        "NSSpeechRecognitionUsageDescription": "VISION uses speech recognition for hands-free voice commands on jobsites."
+        "NSLocationWhenInUseUsageDescription": "VISION needs location access to tag jobsite projects with GPS coordinates."
       }
     },
     "android": {
-      "package": "com.visinc.eyesight",
+      "package": "com.visinc.vision",
       "permissions": [
         "CAMERA",
-        "RECORD_AUDIO",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "extra": {
       "eas": {
