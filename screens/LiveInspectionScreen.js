@@ -23,6 +23,7 @@ import VoiceService from "../services/VoiceService";
 import AIVisionService from "../services/AIVisionService";
 import { health } from "../services/McpClient";
 import getSupabaseClient from "../services/supabaseClient";
+import DebugLogger from "../services/DebugLogger";
 
 const INSPECTION_TYPES = [
   { id: "building", label: "Building/Structural", icon: "business" },
@@ -33,19 +34,60 @@ const INSPECTION_TYPES = [
 ];
 
 export default function LiveInspectionScreen({ route, navigation }) {
-  const { projectId: existingProjectId } = route.params || {};
+  // ============================================================
+  // COMPREHENSIVE ERROR TRACKING - Stage 1: Component Init
+  // ============================================================
+  DebugLogger.log("LIVE_AI", "Component mounting...", {
+    routeParams: route?.params || null,
+    hasNavigation: !!navigation,
+  });
+
+  // Verify all critical imports
+  try {
+    if (!VoiceService) throw new Error("VoiceService not imported");
+    if (!AIVisionService) throw new Error("AIVisionService not imported");
+    if (!health) throw new Error("health function not imported");
+    if (!getSupabaseClient) throw new Error("getSupabaseClient not imported");
+    DebugLogger.log("LIVE_AI", "All imports verified");
+  } catch (error) {
+    DebugLogger.error("LIVE_AI", error, { stage: "import_verification" });
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>
+          Error: Missing required services. Check console.
+        </Text>
+      </View>
+    );
+  }
+
+  const { projectId: existingProjectId } = route?.params || {};
+  DebugLogger.log("LIVE_AI", "Route params parsed", { existingProjectId });
 
   const cameraRef = useRef(null);
   const frameIntervalRef = useRef(null);
   const sessionIdRef = useRef(null);
-  const analyzingRef = useRef(false); // Use ref to prevent stale closure
-  const consecutiveErrorsRef = useRef(0); // Track consecutive errors for backoff
-  const isMountedRef = useRef(true); // Track if component is mounted to prevent state updates after unmount
+  const analyzingRef = useRef(false);
+  const consecutiveErrorsRef = useRef(0);
+  const isMountedRef = useRef(true);
 
   // Get camera and location permissions (hooks must be called unconditionally)
-  const [permission, requestPermission] = Camera.useCameraPermissions();
-  const [locationPerm, requestLocationPerm] =
-    Location.useForegroundPermissions();
+  let permission, requestPermission, locationPerm, requestLocationPerm;
+  try {
+    DebugLogger.log("LIVE_AI", "Calling permission hooks...");
+    [permission, requestPermission] = Camera.useCameraPermissions();
+    [locationPerm, requestLocationPerm] = Location.useForegroundPermissions();
+    DebugLogger.log("LIVE_AI", "Permission hooks called successfully", {
+      cameraPermission: permission?.status || "unknown",
+      locationPermission: locationPerm?.status || "unknown",
+    });
+  } catch (error) {
+    DebugLogger.error("LIVE_AI", error, { stage: "permission_hooks" });
+    // Fallback to prevent crash
+    permission = { status: "undetermined", granted: false };
+    requestPermission = () => Promise.resolve({ granted: false });
+    locationPerm = { status: "undetermined", granted: false };
+    requestLocationPerm = () => Promise.resolve({ granted: false });
+  }
   const [isScanning, setIsScanning] = useState(false);
   const [violations, setViolations] = useState([]);
   const [overlays, setOverlays] = useState([]);
@@ -502,8 +544,17 @@ export default function LiveInspectionScreen({ route, navigation }) {
     }
   };
 
-  // Check camera permissions before rendering
+  // ============================================================
+  // Stage 2: Permission Check
+  // ============================================================
+  DebugLogger.log("LIVE_AI", "Checking permissions...", {
+    permissionExists: !!permission,
+    permissionStatus: permission?.status,
+    permissionGranted: permission?.granted,
+  });
+
   if (!permission) {
+    DebugLogger.log("LIVE_AI", "Permission not loaded yet, showing loader");
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#0066CC" />
@@ -513,6 +564,10 @@ export default function LiveInspectionScreen({ route, navigation }) {
   }
 
   if (!permission.granted) {
+    DebugLogger.log(
+      "LIVE_AI",
+      "Camera permission not granted, showing request screen"
+    );
     return (
       <View style={styles.container}>
         <View style={styles.permissionContainer}>
@@ -544,160 +599,189 @@ export default function LiveInspectionScreen({ route, navigation }) {
     );
   }
 
-  // Safety check - ensure all required refs and state are initialized
-  if (typeof cameraRef === "undefined" || typeof isMountedRef === "undefined") {
-    console.error("LiveInspectionScreen: Critical refs not initialized");
+  // ============================================================
+  // Stage 3: Render Camera View
+  // ============================================================
+  DebugLogger.log("LIVE_AI", "Rendering camera view", {
+    showTypePicker,
+    inspectionType,
+    projectId,
+    isScanning,
+  });
+
+  try {
     return (
       <View style={styles.container}>
-        <Text style={styles.loadingText}>Initializing...</Text>
-      </View>
-    );
-  }
+        <StatusBar style="light" />
 
-  return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
-
-      {/* Inspection Type Picker Modal */}
-      <Modal visible={showTypePicker} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Inspection Type</Text>
-            {INSPECTION_TYPES.map((type) => (
-              <TouchableOpacity
-                key={type.id}
-                style={styles.typeButton}
-                onPress={() => selectInspectionType(type.id)}
-              >
-                <MaterialIcons name={type.icon} size={24} color="#3B82F6" />
-                <Text style={styles.typeButtonText}>{type.label}</Text>
-              </TouchableOpacity>
-            ))}
+        {/* Inspection Type Picker Modal */}
+        <Modal visible={showTypePicker} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Select Inspection Type</Text>
+              {INSPECTION_TYPES.map((type) => (
+                <TouchableOpacity
+                  key={type.id}
+                  style={styles.typeButton}
+                  onPress={() => selectInspectionType(type.id)}
+                >
+                  <MaterialIcons name={type.icon} size={24} color="#3B82F6" />
+                  <Text style={styles.typeButtonText}>{type.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      <Camera ref={cameraRef} style={styles.camera} facing="back">
-        {/* Top Bar */}
-        <View style={styles.topBar}>
-          <View style={styles.badge}>
-            <MaterialIcons name="place" size={16} color="white" />
-            <Text style={styles.badgeText}>
-              {projectAddress || "Getting location..."}
+        <Camera ref={cameraRef} style={styles.camera} facing="back">
+          {/* Top Bar */}
+          <View style={styles.topBar}>
+            <View style={styles.badge}>
+              <MaterialIcons name="place" size={16} color="white" />
+              <Text style={styles.badgeText}>
+                {projectAddress || "Getting location..."}
+              </Text>
+            </View>
+
+            {isScanning && (
+              <View
+                style={[
+                  styles.badge,
+                  { backgroundColor: "#10B981", marginLeft: 8 },
+                ]}
+              >
+                <MaterialIcons name="visibility" size={16} color="white" />
+                <Text style={styles.badgeText}>SCANNING</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                stopScanning();
+                navigation.goBack();
+              }}
+            >
+              <MaterialIcons name="close" size={32} color="white" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Inspection Type Badge */}
+          <View style={styles.typeBadge}>
+            <Text style={styles.typeBadgeText}>
+              {INSPECTION_TYPES.find((t) => t.id === inspectionType)?.label ||
+                "Building"}
             </Text>
           </View>
 
-          {isScanning && (
-            <View
-              style={[
-                styles.badge,
-                { backgroundColor: "#10B981", marginLeft: 8 },
-              ]}
-            >
-              <MaterialIcons name="visibility" size={16} color="white" />
-              <Text style={styles.badgeText}>SCANNING</Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => {
-              stopScanning();
-              navigation.goBack();
-            }}
-          >
-            <MaterialIcons name="close" size={32} color="white" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Inspection Type Badge */}
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeBadgeText}>
-            {INSPECTION_TYPES.find((t) => t.id === inspectionType)?.label ||
-              "Building"}
-          </Text>
-        </View>
-
-        {/* AR Violation Overlays */}
-        <View style={styles.overlaysContainer}>
-          {overlays.map((overlay) => (
-            <View
-              key={overlay.id}
-              style={[
-                styles.overlay,
-                {
-                  backgroundColor: getSeverityColor(overlay.severity) + "F0",
-                  borderColor: getSeverityColor(overlay.severity),
-                  left: `${overlay.x * 100}%`,
-                  top: `${overlay.y * 100}%`,
-                },
-              ]}
-            >
-              <View style={styles.overlayHeader}>
-                <MaterialIcons name="warning" size={18} color="white" />
-                <Text style={styles.overlayCode}>{overlay.code}</Text>
+          {/* AR Violation Overlays */}
+          <View style={styles.overlaysContainer}>
+            {overlays.map((overlay) => (
+              <View
+                key={overlay.id}
+                style={[
+                  styles.overlay,
+                  {
+                    backgroundColor: getSeverityColor(overlay.severity) + "F0",
+                    borderColor: getSeverityColor(overlay.severity),
+                    left: `${overlay.x * 100}%`,
+                    top: `${overlay.y * 100}%`,
+                  },
+                ]}
+              >
+                <View style={styles.overlayHeader}>
+                  <MaterialIcons name="warning" size={18} color="white" />
+                  <Text style={styles.overlayCode}>{overlay.code}</Text>
+                </View>
+                <Text style={styles.overlayMessage}>{overlay.text}</Text>
               </View>
-              <Text style={styles.overlayMessage}>{overlay.text}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Bottom Controls */}
-        <View style={styles.bottomBar}>
-          <View style={styles.controls}>
-            <TouchableOpacity
-              style={[
-                styles.controlButton,
-                isScanning && styles.controlButtonActive,
-              ]}
-              onPress={isScanning ? stopScanning : startScanning}
-            >
-              <MaterialIcons
-                name={isScanning ? "pause" : "play-arrow"}
-                size={32}
-                color="white"
-              />
-              <Text style={styles.controlText}>
-                {isScanning ? "PAUSE" : "SCAN"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={captureViolation}
-            >
-              <MaterialIcons name="flag" size={32} color="white" />
-              <Text style={styles.controlText}>MARK</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.controlButton, { backgroundColor: "#10B981" }]}
-              onPress={finishInspection}
-            >
-              <MaterialIcons name="check" size={32} color="white" />
-              <Text style={styles.controlText}>DONE</Text>
-            </TouchableOpacity>
+            ))}
           </View>
 
-          {violations.length > 0 && (
-            <View style={styles.counter}>
-              <Text style={styles.counterText}>
-                {violations.length} violation
-                {violations.length !== 1 ? "s" : ""} found
-              </Text>
-            </View>
-          )}
+          {/* Bottom Controls */}
+          <View style={styles.bottomBar}>
+            <View style={styles.controls}>
+              <TouchableOpacity
+                style={[
+                  styles.controlButton,
+                  isScanning && styles.controlButtonActive,
+                ]}
+                onPress={isScanning ? stopScanning : startScanning}
+              >
+                <MaterialIcons
+                  name={isScanning ? "pause" : "play-arrow"}
+                  size={32}
+                  color="white"
+                />
+                <Text style={styles.controlText}>
+                  {isScanning ? "PAUSE" : "SCAN"}
+                </Text>
+              </TouchableOpacity>
 
-          {analyzing && (
-            <View style={styles.analyzingBox}>
-              <ActivityIndicator size="small" color="white" />
-              <Text style={styles.analyzingText}>Analyzing with AI...</Text>
+              <TouchableOpacity
+                style={styles.controlButton}
+                onPress={captureViolation}
+              >
+                <MaterialIcons name="flag" size={32} color="white" />
+                <Text style={styles.controlText}>MARK</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.controlButton, { backgroundColor: "#10B981" }]}
+                onPress={finishInspection}
+              >
+                <MaterialIcons name="check" size={32} color="white" />
+                <Text style={styles.controlText}>DONE</Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </View>
-      </Camera>
-    </View>
-  );
+
+            {violations.length > 0 && (
+              <View style={styles.counter}>
+                <Text style={styles.counterText}>
+                  {violations.length} violation
+                  {violations.length !== 1 ? "s" : ""} found
+                </Text>
+              </View>
+            )}
+
+            {analyzing && (
+              <View style={styles.analyzingBox}>
+                <ActivityIndicator size="small" color="white" />
+                <Text style={styles.analyzingText}>Analyzing with AI...</Text>
+              </View>
+            )}
+          </View>
+        </Camera>
+      </View>
+    );
+  } catch (renderError) {
+    DebugLogger.error("LIVE_AI", renderError, {
+      stage: "render",
+      showTypePicker,
+      inspectionType,
+      projectId,
+    });
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>
+          Render Error: {renderError?.message || "Unknown error"}
+        </Text>
+        <Text style={styles.loadingText}>
+          Check console for full error details
+        </Text>
+        <TouchableOpacity
+          style={styles.permissionButton}
+          onPress={() => {
+            const report = DebugLogger.getReport();
+            console.log("=== FULL DEBUG REPORT ===", report);
+            Alert.alert("Debug Report", "Check console for full error details");
+          }}
+        >
+          <Text style={styles.permissionButtonText}>Show Debug Info</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
